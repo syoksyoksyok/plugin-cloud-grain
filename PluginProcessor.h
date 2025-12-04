@@ -62,10 +62,58 @@ public:
         // Clouds-style pitch shifting
         double phase           = 0.0;  // Phase for triangular crossfade
         double phaseIncrement  = 0.0;  // Phase advancement
+
+        // Clouds-style additions
+        int    preDelay        = 0;    // Delay before grain activation (samples)
+        float  gainL           = 1.0f; // Left channel gain
+        float  gainR           = 1.0f; // Right channel gain
     };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // Simple allpass filter for diffuser (no DSP module required)
+    class SimpleAllpass
+    {
+    public:
+        SimpleAllpass() : buffer(nullptr), bufferSize(0), writePos(0) {}
+
+        void setDelay(int delaySamples)
+        {
+            if (delaySamples != bufferSize)
+            {
+                bufferSize = delaySamples;
+                buffer.reset(new float[bufferSize]);
+                clear();
+            }
+        }
+
+        void clear()
+        {
+            if (buffer)
+                std::fill(buffer.get(), buffer.get() + bufferSize, 0.0f);
+            writePos = 0;
+        }
+
+        float process(float input, float feedback = 0.5f)
+        {
+            if (!buffer || bufferSize == 0) return input;
+
+            int readPos = (writePos - bufferSize + bufferSize) % bufferSize;
+            float delayed = buffer[readPos];
+
+            float output = -input + delayed;
+            buffer[writePos] = input + delayed * feedback;
+
+            writePos = (writePos + 1) % bufferSize;
+            return output;
+        }
+
+    private:
+        std::unique_ptr<float[]> buffer;
+        int bufferSize;
+        int writePos;
+    };
 
     // Constants
     static constexpr int maxGrains = 64;
@@ -87,9 +135,9 @@ private:
     juce::AudioBuffer<float> wetBuffer;
     juce::AudioBuffer<float> reverbBuffer;
 
-    // Clouds-style diffuser (allpass filters for stereo widening)
-    juce::dsp::IIR::Filter<float> diffuserL1, diffuserL2, diffuserL3;
-    juce::dsp::IIR::Filter<float> diffuserR1, diffuserR2, diffuserR3;
+    // Stereo diffuser (Clouds-style, no DSP module)
+    SimpleAllpass diffuserL1, diffuserL2, diffuserL3;
+    SimpleAllpass diffuserR1, diffuserR2, diffuserR3;
 
     std::atomic<float> lastRandomizeValue { 0.0f };
 
