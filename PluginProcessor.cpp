@@ -73,6 +73,26 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     rp.freezeMode = 0.0f;
     reverb.setParameters (rp);
     reverb.reset();
+
+    // Initialize diffuser allpass filters with different delays
+    auto diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 500.0f);
+    diffuserL1.coefficients = diffuserCoeffs;
+    diffuserR1.coefficients = diffuserCoeffs;
+
+    diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 1200.0f);
+    diffuserL2.coefficients = diffuserCoeffs;
+    diffuserR2.coefficients = diffuserCoeffs;
+
+    diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 2000.0f);
+    diffuserL3.coefficients = diffuserCoeffs;
+    diffuserR3.coefficients = diffuserCoeffs;
+
+    diffuserL1.reset();
+    diffuserL2.reset();
+    diffuserL3.reset();
+    diffuserR1.reset();
+    diffuserR2.reset();
+    diffuserR3.reset();
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -96,10 +116,45 @@ float CloudLikeGranularProcessor::getGrainEnvelope (double t, double duration, f
     double x = t / duration;
     if (x < 0.0 || x > 1.0) return 0.0f;
 
-    float shape = 0.5f + textureParam * 5.5f;
+    // Clouds-style window shape mapping
+    float windowShape = textureParam < 0.75f ? textureParam * 1.333f : 1.0f;
+
+    // Parametric window function
     float env = std::sin (juce::MathConstants<float>::pi * x);
+
+    // Apply shape with dynamic exponent
+    float shape = 0.5f + windowShape * 3.0f;
     env = std::pow (env, shape);
+
     return env * env;
+}
+
+// Carmack's fast inverse square root (for gain normalization)
+float CloudLikeGranularProcessor::fastInverseSqrt (float number) const
+{
+    // Modern approximation with better accuracy
+    if (number <= 0.0f) return 1.0f;
+    return 1.0f / std::sqrt (number);
+}
+
+// Clouds-style overlap computation
+float CloudLikeGranularProcessor::computeOverlap (float density) const
+{
+    float overlap = 0.0f;
+
+    if (density >= 0.53f)
+    {
+        overlap = (density - 0.53f) * 2.12f;
+    }
+    else if (density <= 0.47f)
+    {
+        overlap = (0.47f - density) * 2.12f;
+    }
+
+    // Cubic scaling (Clouds algorithm)
+    overlap = overlap * overlap * overlap;
+
+    return juce::jlimit (0.0f, 1.0f, overlap);
 }
 
 void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
@@ -147,6 +202,10 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
             g.durationSamples = durationSamps;
             g.phaseInc = pitchRatio;
             g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+
+            // Clouds-style pitch shifting initialization
+            g.phase = 0.0;
+            g.phaseIncrement = (1.0 - pitchRatio) / durationSamps;
         }
         else
         {
@@ -161,6 +220,10 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
             g.durationSamples = durationSamps;
             g.phaseInc = pitchRatio;
             g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+
+            // Clouds-style pitch shifting initialization
+            g.phase = 0.0;
+            g.phaseIncrement = (1.0 - pitchRatio) / durationSamps;
         }
     }
 }
@@ -201,6 +264,14 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     float effectiveFeedback = freeze ? 1.0f : feedback;
 
+    // Clouds-style overlap and grain density calculation
+    float overlap = computeOverlap (density);
+    float targetNumGrains = maxGrains * overlap;
+    float grainRate = targetNumGrains / (maxGrains * 0.1f);  // Normalized rate
+
+    // Determine seeding mode based on density
+    bool useDeterministic = density < 0.5f;
+
     for (int i = 0; i < numSamples; ++i)
     {
         float inSampleL = inL[i];
@@ -213,32 +284,74 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             writeHead = (writeHead + 1) % bufferSize;
         }
 
-        float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
-        float prob = grainsPerSecond / (float) currentSampleRate;
+        // Clouds-style grain triggering
+        bool triggerGrain = false;
 
-        if (uniform (rng) < prob)
+        if (useDeterministic)
+        {
+            // Deterministic mode: evenly spaced grains
+            grainRatePhasor += grainRate / (float) currentSampleRate * 100.0f;
+            if (grainRatePhasor >= 1.0f)
+            {
+                grainRatePhasor -= 1.0f;
+                triggerGrain = true;
+            }
+        }
+        else
+        {
+            // Probabilistic mode: random triggering
+            float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
+            float prob = grainsPerSecond / (float) currentSampleRate;
+            triggerGrain = (uniform (rng) < prob);
+        }
+
+        if (triggerGrain)
         {
             launchGrains (1, 0, position, size, pitch, texture, spread);
             launchGrains (1, 1, position, size, pitch, texture, spread);
         }
 
         float grainOutL = 0.0f, grainOutR = 0.0f;
+        numActiveGrains = 0;
 
         for (int idx = 0; idx < maxGrains; ++idx)
         {
             auto& g = grains[idx];
             if (!g.active) continue;
+
+            numActiveGrains++;
+
             if (g.position >= g.durationSamples)
             {
                 g.active = false;
                 freeGrainIndices.push_back (idx);
+                numActiveGrains--;
                 continue;
             }
 
-            double readIndex = g.startSample + g.position;
-            float s = getSampleFromRing (g.channel, readIndex);
+            // Clouds-style dual read pointer with triangular crossfade
+            double readIndex1 = g.startSample + g.position;
+            double halfPhase = g.phase + 0.5;
+            if (halfPhase >= 1.0) halfPhase -= 1.0;
+            double readIndex2 = g.startSample + g.position * g.phaseInc + halfPhase * g.durationSamples;
+
+            // Triangular envelope for crossfading
+            float tri = 2.0f * (g.phase >= 0.5 ? 1.0f - static_cast<float>(g.phase) : static_cast<float>(g.phase));
+
+            // Read from both positions
+            float s1 = getSampleFromRing (g.channel, readIndex1);
+            float s2 = getSampleFromRing (g.channel, readIndex2);
+
+            // Crossfade between two read positions
+            float s = s1 * tri + s2 * (1.0f - tri);
+
             float env = getGrainEnvelope (g.position, g.durationSamples, texture);
             float v = s * env;
+
+            // Update phase for next sample
+            g.phase += g.phaseIncrement;
+            if (g.phase < 0.0) g.phase += 1.0;
+            if (g.phase >= 1.0) g.phase -= 1.0;
 
             float panL = 0.5f * (1.0f - g.pan);
             float panR = 0.5f * (1.0f + g.pan);
@@ -249,8 +362,45 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             g.position += g.phaseInc;
         }
 
-        wetL[i] = grainOutL;
-        wetR[i] = grainOutR;
+        // Clouds-style gain normalization
+        float gainNormalization = 1.0f;
+        if (numActiveGrains > 1)
+        {
+            // Fast inverse square root for normalization
+            gainNormalization = fastInverseSqrt (static_cast<float> (numActiveGrains - 1));
+        }
+
+        // Window gain scaling (1.0 to 2.0 based on overlap)
+        float windowGain = 1.0f + overlap;
+
+        // Target gain with smoothing
+        float targetGain = gainNormalization * windowGain;
+
+        // One-pole smoothing filter (0.01 coefficient)
+        smoothedGain += 0.01f * (targetGain - smoothedGain);
+
+        // Apply stereo diffuser based on spread parameter
+        float diffusedL = grainOutL;
+        float diffusedR = grainOutR;
+
+        if (spread > 0.01f)
+        {
+            // Apply cascaded allpass filters for diffusion
+            diffusedL = diffuserL1.processSample (diffusedL);
+            diffusedL = diffuserL2.processSample (diffusedL);
+            diffusedL = diffuserL3.processSample (diffusedL);
+
+            diffusedR = diffuserR1.processSample (diffusedR);
+            diffusedR = diffuserR2.processSample (diffusedR);
+            diffusedR = diffuserR3.processSample (diffusedR);
+
+            // Crossfade between dry and diffused based on spread
+            grainOutL = grainOutL * (1.0f - spread) + diffusedL * spread;
+            grainOutR = grainOutR * (1.0f - spread) + diffusedR * spread;
+        }
+
+        wetL[i] = grainOutL * smoothedGain;
+        wetR[i] = grainOutR * smoothedGain;
     }
 
     // Update reverb parameters dynamically based on reverb amount
