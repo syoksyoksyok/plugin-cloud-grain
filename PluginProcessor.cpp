@@ -22,6 +22,10 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+    // Mode selection (for future expansion)
+    juce::StringArray modeChoices { "Granular", "WSOLA", "Looping", "Spectral" };
+    params.push_back (std::make_unique<juce::AudioParameterChoice>("mode", "Mode", modeChoices, 0));
+
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.01f, 0.5f, 0.1f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("pitch",    "Pitch",    -24.0f, 24.0f, 0.0f));

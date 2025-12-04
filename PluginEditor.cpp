@@ -20,6 +20,12 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
+    addAndMakeVisible (modeLabel);
+
+    // Style mode label
+    modeLabel.setFont (juce::Font (14.0f, juce::Font::bold));
+    modeLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (150, 200, 255));
+    modeLabel.setJustificationType (juce::Justification::centredRight);
 
     // Style Freeze button with colors
     freezeButton.setColour (juce::ToggleButton::textColourId, juce::Colours::white);
@@ -78,6 +84,16 @@ void CloudLikeGranularEditor::timerCallback()
         freezeButton.setToggleState (freezeState, juce::dontSendNotification);
         repaint();  // Repaint entire editor to update button highlights
     }
+
+    // Update mode label text based on mode parameter
+    int modeIndex = static_cast<int> (processor.apvts.getRawParameterValue ("mode")->load());
+    juce::StringArray modeNames { "Granular", "WSOLA", "Looping", "Spectral" };
+    juce::String currentMode = modeNames[juce::jlimit (0, modeNames.size() - 1, modeIndex)];
+
+    if (modeLabel.getText() != currentMode)
+    {
+        modeLabel.setText (currentMode, juce::dontSendNotification);
+    }
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
@@ -110,7 +126,7 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white);
     g.setFont (juce::Font (20.0f, juce::Font::bold));
     g.drawFittedText ("Granular Texture",
-                      10, 5, getWidth() - 20, 24,
+                      10, 5, getWidth() - 140, 24,
                       juce::Justification::centred, 1);
 
     // Draw highlight around Freeze button when active
@@ -139,7 +155,10 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
 void CloudLikeGranularEditor::resized()
 {
     auto area = getLocalBounds().reduced (10);
-    area.removeFromTop (30);
+    auto topArea = area.removeFromTop (30);
+
+    // Position mode label in top-right corner
+    modeLabel.setBounds (topArea.removeFromRight (120).reduced (2));
 
     auto leftArea  = area.removeFromLeft (150);
     auto rightArea = area;

@@ -32,6 +32,7 @@ private:
 
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::ToggleButton randomButton { "Randomize" };
+    juce::Label modeLabel;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
