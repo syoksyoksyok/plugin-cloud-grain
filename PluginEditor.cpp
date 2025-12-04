@@ -6,6 +6,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
     setSize (560, 280);
+    startTimerHz (30);  // Update button states at 30Hz
 
     setupKnob (positionKnob, "Position");
     setupKnob (sizeKnob,     "Size");
@@ -19,6 +20,17 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
+
+    // Style Freeze button with colors
+    freezeButton.setColour (juce::ToggleButton::textColourId, juce::Colours::white);
+    freezeButton.setColour (juce::ToggleButton::tickColourId, juce::Colour::fromRGB (100, 200, 255));
+    freezeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (60, 60, 80));
+
+    // Style Randomize button
+    randomButton.setColour (juce::TextButton::buttonColourId, juce::Colour::fromRGB (60, 60, 80));
+    randomButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour::fromRGB (200, 100, 255));
+    randomButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    randomButton.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
 
     randomButton.onClick = [this]
     {
@@ -47,11 +59,25 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 }
 
 // Default destructor (AsyncUpdater cleanup handled automatically)
-CloudLikeGranularEditor::~CloudLikeGranularEditor() = default;
+CloudLikeGranularEditor::~CloudLikeGranularEditor()
+{
+    stopTimer();
+}
 
 void CloudLikeGranularEditor::handleAsyncUpdate()
 {
     randomButton.setToggleState (false, juce::dontSendNotification);
+}
+
+void CloudLikeGranularEditor::timerCallback()
+{
+    // Update freeze button visual state based on parameter
+    bool freezeState = processor.apvts.getRawParameterValue ("freeze")->load() > 0.5f;
+    if (freezeButton.getToggleState() != freezeState)
+    {
+        freezeButton.setToggleState (freezeState, juce::dontSendNotification);
+        repaint();  // Repaint entire editor to update button highlights
+    }
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
@@ -86,6 +112,28 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     g.drawFittedText ("Granular Texture",
                       10, 5, getWidth() - 20, 24,
                       juce::Justification::centred, 1);
+
+    // Draw highlight around Freeze button when active
+    if (freezeButton.getToggleState())
+    {
+        auto freezeBounds = freezeButton.getBounds().toFloat().expanded (2.0f);
+        g.setColour (juce::Colour::fromRGB (100, 200, 255).withAlpha (0.6f));
+        g.drawRoundedRectangle (freezeBounds, 4.0f, 2.5f);
+
+        g.setColour (juce::Colour::fromRGB (100, 200, 255).withAlpha (0.15f));
+        g.fillRoundedRectangle (freezeBounds, 4.0f);
+    }
+
+    // Draw subtle highlight around Randomize button when pressed
+    if (randomButton.getToggleState())
+    {
+        auto randomBounds = randomButton.getBounds().toFloat().expanded (2.0f);
+        g.setColour (juce::Colour::fromRGB (200, 100, 255).withAlpha (0.7f));
+        g.drawRoundedRectangle (randomBounds, 4.0f, 2.5f);
+
+        g.setColour (juce::Colour::fromRGB (200, 100, 255).withAlpha (0.2f));
+        g.fillRoundedRectangle (randomBounds, 4.0f);
+    }
 }
 
 void CloudLikeGranularEditor::resized()
@@ -120,8 +168,16 @@ void CloudLikeGranularEditor::resized()
     placeKnob (reverbKnob,   row2.removeFromLeft (colWidth));
     placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
 
-    auto buttonArea = buttonRow.reduced (10);
+    auto buttonArea = buttonRow.reduced (5);
     auto half = buttonArea.getWidth() / 2;
-    freezeButton.setBounds  (buttonArea.removeFromLeft (half).reduced (5));
-    randomButton.setBounds  (buttonArea.reduced (5));
+
+    auto freezeArea = buttonArea.removeFromLeft (half).reduced (3);
+    auto randomArea = buttonArea.reduced (3);
+
+    freezeButton.setBounds (freezeArea);
+    randomButton.setBounds (randomArea);
+
+    // Make buttons more prominent with larger bounds
+    freezeButton.setSize (freezeArea.getWidth(), juce::jmax (35, freezeArea.getHeight()));
+    randomButton.setSize (randomArea.getWidth(), juce::jmax (35, randomArea.getHeight()));
 }
