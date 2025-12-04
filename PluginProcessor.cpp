@@ -47,12 +47,19 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
 {
     currentSampleRate = sampleRate;
 
-    bufferSize = static_cast<int> (sampleRate * 4.0);
+    bufferSize = static_cast<int> (sampleRate * ringBufferSeconds);
     ringBuffer.setSize (2, bufferSize);
     ringBuffer.clear();
     writeHead = 0;
 
-    for (auto& g : grains) g.active = false;
+    // Initialize grain free list
+    freeGrainIndices.clear();
+    freeGrainIndices.reserve (maxGrains);
+    for (int i = 0; i < maxGrains; ++i)
+    {
+        grains[i].active = false;
+        freeGrainIndices.push_back (i);
+    }
 
     wetBuffer.setSize (2, samplesPerBlock);
     reverbBuffer.setSize (2, samplesPerBlock);
@@ -72,8 +79,9 @@ float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) 
 {
     if (bufferSize <= 0) return 0.0f;
 
-    while (index < 0.0) index += bufferSize;
-    while (index >= bufferSize) index -= bufferSize;
+    // Efficient modulo for negative indices
+    index = std::fmod (index, static_cast<double> (bufferSize));
+    if (index < 0.0) index += bufferSize;
 
     int i0 = static_cast<int> (index);
     int i1 = (i0 + 1) % bufferSize;
@@ -99,8 +107,6 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float pitchSemis, float textureParam,
                                                float stereoSpread)
 {
-    juce::ignoreUnused (textureParam);
-
     double duration      = juce::jlimit (0.01, 0.5, (double) sizeParam);
     double durationSamps = duration * currentSampleRate;
 
@@ -111,20 +117,42 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
     double pitchRatio = std::pow (2.0, pitchSemis / 12.0);
     float spreadWidth = stereoSpread;
 
+    // Use texture to control grain start position randomization
+    float positionJitter = 0.05f + textureParam * 0.15f;
+
     for (int n = 0; n < numToLaunch; ++n)
     {
-        auto it = std::find_if (grains.begin(), grains.end(),
-                                [] (Grain& g) { return !g.active; });
-        if (it == grains.end()) break;
+        // Use free list for efficient grain allocation
+        if (freeGrainIndices.empty())
+        {
+            // Fallback: find first inactive grain
+            auto it = std::find_if (grains.begin(), grains.end(),
+                                    [] (const Grain& g) { return !g.active; });
+            if (it == grains.end()) break;
 
-        Grain& g = *it;
-        g.active = true;
-        g.channel = channel;
-        g.startSample = baseStart + (uniform(rng) - 0.5f) * 0.1f * durationSamps;
-        g.position = 0.0;
-        g.durationSamples = durationSamps;
-        g.phaseInc = pitchRatio;
-        g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+            Grain& g = *it;
+            g.active = true;
+            g.channel = channel;
+            g.startSample = baseStart + (uniform(rng) - 0.5f) * positionJitter * durationSamps;
+            g.position = 0.0;
+            g.durationSamples = durationSamps;
+            g.phaseInc = pitchRatio;
+            g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+        }
+        else
+        {
+            int idx = freeGrainIndices.back();
+            freeGrainIndices.pop_back();
+
+            Grain& g = grains[idx];
+            g.active = true;
+            g.channel = channel;
+            g.startSample = baseStart + (uniform(rng) - 0.5f) * positionJitter * durationSamps;
+            g.position = 0.0;
+            g.durationSamples = durationSamps;
+            g.phaseInc = pitchRatio;
+            g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+        }
     }
 }
 
@@ -176,7 +204,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             writeHead = (writeHead + 1) % bufferSize;
         }
 
-        float grainsPerSecond = 4.0f + density * 96.0f;
+        float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
         float prob = grainsPerSecond / (float) currentSampleRate;
 
         if (uniform (rng) < prob)
@@ -187,12 +215,14 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         float grainOutL = 0.0f, grainOutR = 0.0f;
 
-        for (auto& g : grains)
+        for (int idx = 0; idx < maxGrains; ++idx)
         {
+            auto& g = grains[idx];
             if (!g.active) continue;
             if (g.position >= g.durationSamples)
             {
                 g.active = false;
+                freeGrainIndices.push_back (idx);
                 continue;
             }
 
@@ -213,6 +243,16 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         wetL[i] = grainOutL;
         wetR[i] = grainOutR;
     }
+
+    // Update reverb parameters dynamically based on reverb amount
+    juce::Reverb::Parameters rp;
+    rp.roomSize   = 0.5f + reverbAmt * 0.45f;  // Scale with reverb amount
+    rp.damping    = 0.3f;
+    rp.wetLevel   = 1.0f;
+    rp.dryLevel   = 0.0f;
+    rp.width      = 1.0f;
+    rp.freezeMode = freeze ? 1.0f : 0.0f;  // Link freeze mode to reverb
+    reverb.setParameters (rp);
 
     reverbBuffer.makeCopyOf (wetBuffer);
     reverbBuffer.applyGain (reverbAmt);
@@ -246,11 +286,13 @@ void CloudLikeGranularProcessor::parameterChanged (const juce::String& parameter
 
 void CloudLikeGranularProcessor::randomizeParameters()
 {
-    juce::Random r;
-    auto set = [this, &r] (const juce::String& id, float min, float max)
+    auto set = [this] (const juce::String& id, float min, float max)
     {
         if (auto* p = apvts.getParameter (id))
-            p->setValueNotifyingHost (r.nextFloat() * (max - min) + min);
+        {
+            float value = uniform(rng) * (max - min) + min;
+            p->setValueNotifyingHost (value);
+        }
     };
 
     set ("position",  0.0f, 1.0f);
@@ -260,10 +302,10 @@ void CloudLikeGranularProcessor::randomizeParameters()
     set ("texture",   0.0f, 1.0f);
     set ("feedback",  0.0f, 0.95f);
     set ("reverb",    0.0f, 1.0f);
-    if (r.nextBool())
-        apvts.getParameter("freeze")->setValueNotifyingHost (1.0f);
-    else
-        apvts.getParameter("freeze")->setValueNotifyingHost (0.0f);
+
+    // Randomly set freeze parameter
+    bool freezeState = uniform(rng) > 0.5f;
+    apvts.getParameter("freeze")->setValueNotifyingHost (freezeState ? 1.0f : 0.0f);
 }
 
 juce::AudioProcessorEditor* CloudLikeGranularProcessor::createEditor()

@@ -48,7 +48,7 @@ public:
 
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
-    // Grain 構造体を public に移動（これで C2099 エラー完全解消）
+    // Grain structure (public for potential visualization)
     struct Grain
     {
         bool   active          = false;
@@ -63,8 +63,13 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // Constants
     static constexpr int maxGrains = 64;
+    static constexpr double ringBufferSeconds = 4.0;
+    static constexpr float minGrainsPerSecond = 4.0f;
+    static constexpr float maxGrainsPerSecond = 100.0f;
     std::array<Grain, maxGrains> grains;
+    std::vector<int> freeGrainIndices;
 
     juce::AudioBuffer<float> ringBuffer;
     int    bufferSize = 0;

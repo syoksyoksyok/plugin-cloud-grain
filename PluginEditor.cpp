@@ -46,7 +46,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
 }
 
-// cancelAsyncUpdate() を削除（デストラクタで呼ぶとC3861）
+// Default destructor (AsyncUpdater cleanup handled automatically)
 CloudLikeGranularEditor::~CloudLikeGranularEditor() = default;
 
 void CloudLikeGranularEditor::handleAsyncUpdate()
