@@ -7,6 +7,7 @@
 //==============================================================================
 class CloudLikeGranularEditor  : public juce::AudioProcessorEditor
                                , public juce::AsyncUpdater
+                               , public juce::Timer
 {
 public:
     CloudLikeGranularEditor (CloudLikeGranularProcessor&);
@@ -15,6 +16,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void handleAsyncUpdate() override;
+    void timerCallback() override;
 
 private:
     CloudLikeGranularProcessor& processor;
