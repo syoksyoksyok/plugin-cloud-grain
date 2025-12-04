@@ -58,6 +58,10 @@ public:
         double durationSamples = 0.0;
         double phaseInc        = 1.0;
         float  pan             = 0.0f;
+
+        // Clouds-style pitch shifting
+        double phase           = 0.0;  // Phase for triangular crossfade
+        double phaseIncrement  = 0.0;  // Phase advancement
     };
 
 private:
@@ -83,7 +87,16 @@ private:
     juce::AudioBuffer<float> wetBuffer;
     juce::AudioBuffer<float> reverbBuffer;
 
+    // Clouds-style diffuser (allpass filters for stereo widening)
+    juce::dsp::IIR::Filter<float> diffuserL1, diffuserL2, diffuserL3;
+    juce::dsp::IIR::Filter<float> diffuserR1, diffuserR2, diffuserR3;
+
     std::atomic<float> lastRandomizeValue { 0.0f };
+
+    // Clouds-style density control
+    float grainRatePhasor = 0.0f;
+    int numActiveGrains = 0;
+    float smoothedGain = 1.0f;
 
     void launchGrains (int numToLaunch, int channel,
                        float positionParam, float sizeParam,
@@ -92,6 +105,10 @@ private:
 
     float getSampleFromRing (int channel, double index) const;
     float getGrainEnvelope (double t, double duration, float textureParam) const;
+
+    // Clouds-style helper functions
+    float fastInverseSqrt (float number) const;
+    float computeOverlap (float density) const;
 
     void randomizeParameters();
 
