@@ -381,30 +381,43 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             }
 
             // Clouds-style dual read pointer with triangular crossfade
-            double readIndex1 = g.startSample + g.position;
+            // For pitch shifting: use dual pointers. For no pitch shift: simple reading
+            float s;
 
-            // Calculate second read pointer within grain bounds
-            double normalizedPhase = g.phase;
-            double offset = normalizedPhase * g.durationSamples;
-            double readIndex2 = g.startSample + offset;
+            if (std::abs(g.phaseInc - 1.0) < 0.01)
+            {
+                // No significant pitch shift - use simple single-pointer reading
+                double readIndex = g.startSample + g.position;
+                s = getSampleFromRing (g.channel, readIndex);
+            }
+            else
+            {
+                // Pitch shifting - use dual read pointer system
+                double readIndex1 = g.startSample + g.position;
 
-            // Triangular envelope for crossfading
-            float tri = 2.0f * (g.phase >= 0.5 ? 1.0f - static_cast<float>(g.phase) : static_cast<float>(g.phase));
+                // Calculate second read pointer within grain bounds
+                double normalizedPhase = g.phase;
+                double offset = normalizedPhase * g.durationSamples;
+                double readIndex2 = g.startSample + offset;
 
-            // Read from both positions
-            float s1 = getSampleFromRing (g.channel, readIndex1);
-            float s2 = getSampleFromRing (g.channel, readIndex2);
+                // Triangular envelope for crossfading
+                float tri = 2.0f * (g.phase >= 0.5 ? 1.0f - static_cast<float>(g.phase) : static_cast<float>(g.phase));
 
-            // Crossfade between two read positions
-            float s = s1 * tri + s2 * (1.0f - tri);
+                // Read from both positions
+                float s1 = getSampleFromRing (g.channel, readIndex1);
+                float s2 = getSampleFromRing (g.channel, readIndex2);
+
+                // Crossfade between two read positions
+                s = s1 * tri + s2 * (1.0f - tri);
+
+                // Update phase for next sample
+                g.phase += g.phaseIncrement;
+                if (g.phase < 0.0) g.phase += 1.0;
+                if (g.phase >= 1.0) g.phase -= 1.0;
+            }
 
             float env = getGrainEnvelope (g.position, g.durationSamples, texture);
             float v = s * env;
-
-            // Update phase for next sample
-            g.phase += g.phaseIncrement;
-            if (g.phase < 0.0) g.phase += 1.0;
-            if (g.phase >= 1.0) g.phase -= 1.0;
 
             // Clouds-style per-grain stereo gain
             grainOutL += v * g.gainL;
