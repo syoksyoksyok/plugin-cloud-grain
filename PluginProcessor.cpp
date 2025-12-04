@@ -107,10 +107,19 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float pitchSemis, float textureParam,
                                                float stereoSpread)
 {
+    // Safety check: ensure buffer is initialized and large enough
+    if (bufferSize <= 0) return;
+
     double duration      = juce::jlimit (0.01, 0.5, (double) sizeParam);
     double durationSamps = duration * currentSampleRate;
 
+    // Ensure grain doesn't exceed buffer size
+    durationSamps = juce::jmin (durationSamps, (double) bufferSize * 0.9);
+
     double maxOffset = (double) bufferSize - durationSamps - 1.0;
+    // Additional safety: ensure maxOffset is positive
+    if (maxOffset < 1.0) return;
+
     double offset    = (1.0f - positionParam) * maxOffset;
     double baseStart = (double) writeHead - offset;
 
