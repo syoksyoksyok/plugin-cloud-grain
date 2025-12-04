@@ -73,26 +73,6 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     rp.freezeMode = 0.0f;
     reverb.setParameters (rp);
     reverb.reset();
-
-    // Initialize diffuser allpass filters with different delays
-    auto diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 500.0f);
-    diffuserL1.coefficients = diffuserCoeffs;
-    diffuserR1.coefficients = diffuserCoeffs;
-
-    diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 1200.0f);
-    diffuserL2.coefficients = diffuserCoeffs;
-    diffuserR2.coefficients = diffuserCoeffs;
-
-    diffuserCoeffs = juce::dsp::IIR::Coefficients<float>::makeAllPass (sampleRate, 2000.0f);
-    diffuserL3.coefficients = diffuserCoeffs;
-    diffuserR3.coefficients = diffuserCoeffs;
-
-    diffuserL1.reset();
-    diffuserL2.reset();
-    diffuserL3.reset();
-    diffuserR1.reset();
-    diffuserR2.reset();
-    diffuserR3.reset();
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -378,26 +358,6 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         // One-pole smoothing filter (0.01 coefficient)
         smoothedGain += 0.01f * (targetGain - smoothedGain);
-
-        // Apply stereo diffuser based on spread parameter
-        float diffusedL = grainOutL;
-        float diffusedR = grainOutR;
-
-        if (spread > 0.01f)
-        {
-            // Apply cascaded allpass filters for diffusion
-            diffusedL = diffuserL1.processSample (diffusedL);
-            diffusedL = diffuserL2.processSample (diffusedL);
-            diffusedL = diffuserL3.processSample (diffusedL);
-
-            diffusedR = diffuserR1.processSample (diffusedR);
-            diffusedR = diffuserR2.processSample (diffusedR);
-            diffusedR = diffuserR3.processSample (diffusedR);
-
-            // Crossfade between dry and diffused based on spread
-            grainOutL = grainOutL * (1.0f - spread) + diffusedL * spread;
-            grainOutR = grainOutR * (1.0f - spread) + diffusedR * spread;
-        }
 
         wetL[i] = grainOutL * smoothedGain;
         wetR[i] = grainOutR * smoothedGain;

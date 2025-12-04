@@ -87,10 +87,6 @@ private:
     juce::AudioBuffer<float> wetBuffer;
     juce::AudioBuffer<float> reverbBuffer;
 
-    // Clouds-style diffuser (allpass filters for stereo widening)
-    juce::dsp::IIR::Filter<float> diffuserL1, diffuserL2, diffuserL3;
-    juce::dsp::IIR::Filter<float> diffuserR1, diffuserR2, diffuserR3;
-
     std::atomic<float> lastRandomizeValue { 0.0f };
 
     // Clouds-style density control
