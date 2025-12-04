@@ -311,9 +311,11 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
             // Clouds-style dual read pointer with triangular crossfade
             double readIndex1 = g.startSample + g.position;
-            double halfPhase = g.phase + 0.5;
-            if (halfPhase >= 1.0) halfPhase -= 1.0;
-            double readIndex2 = g.startSample + g.position * g.phaseInc + halfPhase * g.durationSamples;
+
+            // Calculate second read pointer within grain bounds
+            double normalizedPhase = g.phase;
+            double offset = normalizedPhase * g.durationSamples;
+            double readIndex2 = g.startSample + offset;
 
             // Triangular envelope for crossfading
             float tri = 2.0f * (g.phase >= 0.5 ? 1.0f - static_cast<float>(g.phase) : static_cast<float>(g.phase));
