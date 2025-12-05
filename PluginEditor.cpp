@@ -2,6 +2,61 @@
 #include "PluginEditor.h"
 
 //==============================================================================
+// KnobLookAndFeel implementation
+KnobLookAndFeel::KnobLookAndFeel()
+{
+    // Load the knob sprite image
+    juce::File knobFile = juce::File::getCurrentWorkingDirectory()
+                                     .getChildFile ("Resources")
+                                     .getChildFile ("knob.png");
+
+    if (knobFile.existsAsFile())
+    {
+        knobImage = juce::ImageCache::getFromFile (knobFile);
+    }
+}
+
+bool KnobLookAndFeel::loadKnobImage (const juce::File& imageFile)
+{
+    if (imageFile.existsAsFile())
+    {
+        knobImage = juce::ImageCache::getFromFile (imageFile);
+        return knobImage.isValid();
+    }
+    return false;
+}
+
+void KnobLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                                       float sliderPosProportional, float /*rotaryStartAngle*/,
+                                       float /*rotaryEndAngle*/, juce::Slider& /*slider*/)
+{
+    if (!knobImage.isValid())
+    {
+        // Fallback to default drawing if image not loaded
+        LookAndFeel_V4::drawRotarySlider (g, x, y, width, height, sliderPosProportional,
+                                         0.0f, juce::MathConstants<float>::twoPi,
+                                         *static_cast<juce::Slider*>(nullptr));
+        return;
+    }
+
+    // Calculate which frame to display based on slider position
+    int frameIndex = juce::jlimit (0, numFrames - 1,
+                                   static_cast<int> (sliderPosProportional * numFrames));
+
+    // Calculate source rectangle for the sprite frame
+    juce::Rectangle<int> sourceRect (0, frameIndex * frameSize, frameSize, frameSize);
+
+    // Calculate destination rectangle (centered in the given bounds)
+    int size = juce::jmin (width, height);
+    juce::Rectangle<int> destRect (x + (width - size) / 2,
+                                   y + (height - size) / 2,
+                                   size, size);
+
+    // Draw the sprite frame
+    g.drawImage (knobImage, destRect.toFloat(), sourceRect.toFloat());
+}
+
+//==============================================================================
 CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
@@ -68,6 +123,17 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
 {
     stopTimer();
+
+    // Clear LookAndFeel from all sliders before destruction
+    positionKnob.slider.setLookAndFeel (nullptr);
+    sizeKnob.slider.setLookAndFeel (nullptr);
+    pitchKnob.slider.setLookAndFeel (nullptr);
+    densityKnob.slider.setLookAndFeel (nullptr);
+    textureKnob.slider.setLookAndFeel (nullptr);
+    spreadKnob.slider.setLookAndFeel (nullptr);
+    feedbackKnob.slider.setLookAndFeel (nullptr);
+    reverbKnob.slider.setLookAndFeel (nullptr);
+    mixKnob.slider.setLookAndFeel (nullptr);
 }
 
 void CloudLikeGranularEditor::handleAsyncUpdate()
@@ -112,6 +178,9 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
     k.slider.setPopupDisplayEnabled (true, false, this);
+
+    // Apply custom LookAndFeel for sprite-based knob
+    k.slider.setLookAndFeel (&knobLookAndFeel);
 
     k.label.setText (name, juce::dontSendNotification);
     k.label.attachToComponent (&k.slider, false);

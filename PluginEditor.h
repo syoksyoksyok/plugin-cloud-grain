@@ -5,6 +5,25 @@
 #include "PluginProcessor.h"
 
 //==============================================================================
+// Custom LookAndFeel for sprite-based knobs
+class KnobLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    KnobLookAndFeel();
+
+    void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                          float sliderPosProportional, float rotaryStartAngle,
+                          float rotaryEndAngle, juce::Slider& slider) override;
+
+    bool loadKnobImage (const juce::File& imageFile);
+
+private:
+    juce::Image knobImage;
+    static constexpr int numFrames = 64;
+    static constexpr int frameSize = 64;
+};
+
+//==============================================================================
 class CloudLikeGranularEditor  : public juce::AudioProcessorEditor
                                , public juce::AsyncUpdater
                                , public juce::Timer
@@ -29,6 +48,8 @@ private:
 
     Knob positionKnob, sizeKnob, pitchKnob, densityKnob;
     Knob textureKnob, spreadKnob, feedbackKnob, reverbKnob, mixKnob;
+
+    KnobLookAndFeel knobLookAndFeel;
 
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::ToggleButton randomButton { "Randomize" };
