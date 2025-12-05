@@ -212,12 +212,15 @@ private:
     int loopEndPos = 0;
     int loopLength = 0;
 
-    // Spectral mode state (phase vocoder-style without FFT)
-    static constexpr int spectralWindowSize = 2048;
-    double spectralReadPos = 0.0;
-    std::array<float, spectralWindowSize> spectralBufferL;
-    std::array<float, spectralWindowSize> spectralBufferR;
-    int spectralWritePos = 0;
+    // Spectral mode state (FFT-based using juce::dsp)
+    static constexpr int fftOrder = 11;
+    static constexpr int fftSize = 1 << fftOrder;  // 2048
+    juce::dsp::FFT forwardFFT { fftOrder };
+    std::array<float, fftSize * 2> fftDataL;
+    std::array<float, fftSize * 2> fftDataR;
+    int spectralOverlapPos = 0;
+    std::array<float, fftSize> spectralOutputL;
+    std::array<float, fftSize> spectralOutputR;
 
     std::atomic<float> lastRandomizeValue { 0.0f };
 
