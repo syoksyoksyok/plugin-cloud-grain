@@ -186,10 +186,11 @@ private:
     static constexpr int HANN_WINDOW_SIZE = 2048;
     static constexpr int PITCH_LUT_SIZE = 49;  // -24 to +24 semitones
 
-    std::array<float, SINE_TABLE_SIZE> sineLUT;
-    std::array<float, SINE_TABLE_SIZE> cosineLUT;
-    std::array<float, HANN_WINDOW_SIZE> hannWindowLUT;
-    std::array<float, PITCH_LUT_SIZE> pitchRatioLUT;
+    // OPTIMIZATION: Memory alignment for SIMD (32-byte for AVX)
+    alignas(32) std::array<float, SINE_TABLE_SIZE> sineLUT;
+    alignas(32) std::array<float, SINE_TABLE_SIZE> cosineLUT;
+    alignas(32) std::array<float, HANN_WINDOW_SIZE> hannWindowLUT;
+    alignas(32) std::array<float, PITCH_LUT_SIZE> pitchRatioLUT;
 
     // Fast LUT access helpers
     inline float fastSin(float phase) const {
@@ -262,6 +263,7 @@ private:
 
     juce::AudioBuffer<float> ringBuffer;
     int    bufferSize = 0;
+    int    bufferSizeMask = 0;  // OPTIMIZATION: Bit mask for fast modulo (bufferSize - 1)
     int    writeHead = 0;
     double currentSampleRate = 44100.0;
 
@@ -296,12 +298,16 @@ private:
     static constexpr int fftOrder = 11;
     static constexpr int fftSize = 1 << fftOrder;  // 2048
     juce::dsp::FFT forwardFFT { fftOrder };
-    std::array<float, fftSize * 2> fftDataL;
-    std::array<float, fftSize * 2> fftDataR;
+    alignas(32) std::array<float, fftSize * 2> fftDataL;
+    alignas(32) std::array<float, fftSize * 2> fftDataR;
     int spectralInputPos = 0;      // Input accumulation position
     int spectralOutputPos = 0;     // Output read position
-    std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
-    std::array<float, fftSize * 2> spectralOutputR;
+    alignas(32) std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
+    alignas(32) std::array<float, fftSize * 2> spectralOutputR;
+
+    // OPTIMIZATION: Reusable buffers for spectral processing (avoid stack allocation)
+    alignas(32) std::array<float, fftSize * 2> spectralShiftedL;
+    alignas(32) std::array<float, fftSize * 2> spectralShiftedR;
 
     // Oliverb mode state (Multi-tap reverb with modulation)
     struct OliverbTap
