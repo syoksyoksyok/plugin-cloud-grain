@@ -216,11 +216,12 @@ private:
     static constexpr int fftOrder = 11;
     static constexpr int fftSize = 1 << fftOrder;  // 2048
     juce::dsp::FFT forwardFFT { fftOrder };
-    std::array<float, fftSize * 2> fftDataL;
-    std::array<float, fftSize * 2> fftDataR;
-    int spectralOverlapPos = 0;
-    std::array<float, fftSize> spectralOutputL;
-    std::array<float, fftSize> spectralOutputR;
+    std::array<float, fftSize * 2> fftDataL {};  // Zero-initialized
+    std::array<float, fftSize * 2> fftDataR {};
+    int spectralInputPos = 0;
+    int spectralOutputPos = 0;
+    std::array<float, fftSize> spectralOutputL {};  // Zero-initialized
+    std::array<float, fftSize> spectralOutputR {};
 
     std::atomic<float> lastRandomizeValue { 0.0f };
 
