@@ -221,9 +221,10 @@ private:
     juce::dsp::FFT forwardFFT { fftOrder };
     std::array<float, fftSize * 2> fftDataL;
     std::array<float, fftSize * 2> fftDataR;
-    int spectralOverlapPos = 0;
-    std::array<float, fftSize> spectralOutputL;
-    std::array<float, fftSize> spectralOutputR;
+    int spectralInputPos = 0;      // Input accumulation position
+    int spectralOutputPos = 0;     // Output read position
+    std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
+    std::array<float, fftSize * 2> spectralOutputR;
 
     // Oliverb mode state (Multi-tap reverb with modulation)
     struct OliverbTap
