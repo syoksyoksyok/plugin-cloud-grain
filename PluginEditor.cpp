@@ -111,6 +111,64 @@ void CloudLikeGranularEditor::timerCallback()
     {
         modeLabel.setText (modeText, juce::dontSendNotification);
     }
+
+    // Update knob labels based on mode
+    juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
+
+    switch (mode)
+    {
+        case 0:  // Granular
+            posLabel = "Position";
+            sizeLabel = "Size";
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 1:  // WSOLA
+            posLabel = "Position";
+            sizeLabel = "Stretch";  // Time stretch ratio
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 2:  // Looping
+            posLabel = "Loop Pos";  // Loop position
+            sizeLabel = "Loop Len";  // Loop length
+            pitchLabel = "Speed";    // Playback speed
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 3:  // Spectral
+            posLabel = "Delay";      // Delay position
+            sizeLabel = "Size";      // Window size (currently fixed)
+            pitchLabel = "Freq Shift";  // Frequency shift
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        default:
+            posLabel = "Position";
+            sizeLabel = "Size";
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+    }
+
+    // Update labels if changed
+    if (positionKnob.label.getText() != posLabel)
+        positionKnob.label.setText (posLabel, juce::dontSendNotification);
+    if (sizeKnob.label.getText() != sizeLabel)
+        sizeKnob.label.setText (sizeLabel, juce::dontSendNotification);
+    if (pitchKnob.label.getText() != pitchLabel)
+        pitchKnob.label.setText (pitchLabel, juce::dontSendNotification);
+    if (densityKnob.label.getText() != densityLabel)
+        densityKnob.label.setText (densityLabel, juce::dontSendNotification);
+    if (textureKnob.label.getText() != textureLabel)
+        textureKnob.label.setText (textureLabel, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
