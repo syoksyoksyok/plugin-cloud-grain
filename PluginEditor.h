@@ -27,7 +27,7 @@ private:
         juce::Label  label;
     };
 
-    Knob positionKnob, sizeKnob, pitchKnob, densityKnob;
+    Knob modeKnob, positionKnob, sizeKnob, pitchKnob, densityKnob;
     Knob textureKnob, spreadKnob, feedbackKnob, reverbKnob, mixKnob;
 
     juce::ToggleButton freezeButton  { "Freeze" };
@@ -37,6 +37,7 @@ private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
+    std::unique_ptr<SliderAttachment> modeAttachment;
     std::unique_ptr<SliderAttachment> positionAttachment;
     std::unique_ptr<SliderAttachment> sizeAttachment;
     std::unique_ptr<SliderAttachment> pitchAttachment;
