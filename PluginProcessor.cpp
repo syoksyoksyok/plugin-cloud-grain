@@ -96,6 +96,12 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     detectedPeriod = 0;
     correlatorUpdateCounter = 0;
 
+    // Initialize Spectral mode state
+    spectralInputPos = 0;
+    spectralOutputPos = 0;
+    spectralOutputL.fill(0.0f);
+    spectralOutputR.fill(0.0f);
+
     // Initialize Oliverb taps (multi-tap delay with modulation)
     const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
     for (size_t i = 0; i < oliverbTaps.size(); ++i)
@@ -680,11 +686,12 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }  // End of LOOPING mode
     else if (mode == MODE_SPECTRAL)
     {
-        // ========== SPECTRAL MODE (FFT-based pitch shifting) ==========
+        // ========== SPECTRAL MODE (FFT-based pitch shifting with Overlap-Add) ==========
         // Real spectral processing using juce::dsp::FFT for frequency domain manipulation
-        // SIZE controls window size, PITCH controls frequency shift, DENSITY controls formant preservation
+        // POSITION: delay/read position, PITCH: frequency shift, SIZE/DENSITY/TEXTURE: reserved
 
         float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+        const int hopSize = fftSize / 4;  // 75% overlap for smooth output
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -698,27 +705,28 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 writeHead = (writeHead + 1) % bufferSize;
             }
 
-            // Fill FFT buffer from ring buffer
-            if (spectralOverlapPos < fftSize)
+            // Fill FFT input buffer from ring buffer
+            if (spectralInputPos < fftSize)
             {
                 // Read from delay position
                 double readDelay = position * (bufferSize - fftSize);
-                int readPos = static_cast<int>(writeHead - readDelay - spectralOverlapPos);
+                int readPos = static_cast<int>(writeHead - readDelay - spectralInputPos);
                 if (readPos < 0) readPos += bufferSize;
                 readPos = readPos % bufferSize;
 
                 // Apply Hann window during input
-                float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * spectralOverlapPos / (fftSize - 1)));
-                fftDataL[spectralOverlapPos] = ringBuffer.getSample(0, readPos) * window;
-                fftDataR[spectralOverlapPos] = ringBuffer.getSample(1, readPos) * window;
+                float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * spectralInputPos / (fftSize - 1)));
+                fftDataL[spectralInputPos] = ringBuffer.getSample(0, readPos) * window;
+                fftDataR[spectralInputPos] = ringBuffer.getSample(1, readPos) * window;
 
-                spectralOverlapPos++;
+                spectralInputPos++;
             }
 
-            // Process when we have a full window
-            if (spectralOverlapPos >= fftSize)
+            // Process FFT when we have a full window
+            if (spectralInputPos >= fftSize)
             {
-                spectralOverlapPos = fftSize / 2;  // 50% overlap
+                // Reset input position for next hop
+                spectralInputPos = 0;
 
                 // Zero pad the second half for complex FFT
                 for (int n = fftSize; n < fftSize * 2; ++n)
@@ -743,7 +751,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                     int targetBin = static_cast<int>(bin * pitchRatio);
                     if (targetBin > 0 && targetBin < fftSize / 2)
                     {
-                        // Copy magnitude and phase
+                        // Copy real and imaginary parts
                         shiftedL[targetBin * 2] = fftDataL[bin * 2];
                         shiftedL[targetBin * 2 + 1] = fftDataL[bin * 2 + 1];
                         shiftedR[targetBin * 2] = fftDataR[bin * 2];
@@ -755,23 +763,35 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 forwardFFT.performRealOnlyInverseTransform(shiftedL.data());
                 forwardFFT.performRealOnlyInverseTransform(shiftedR.data());
 
-                // Copy to output buffer with normalization
+                // Overlap-Add: accumulate to output buffer with Hann window
                 float normGain = 2.0f / fftSize;
                 for (int n = 0; n < fftSize; ++n)
                 {
-                    spectralOutputL[n] = shiftedL[n] * normGain;
-                    spectralOutputR[n] = shiftedR[n] * normGain;
+                    // Apply Hann window on output for smooth transitions
+                    float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * n / (fftSize - 1)));
+                    spectralOutputL[n] += shiftedL[n] * normGain * window;
+                    spectralOutputR[n] += shiftedR[n] * normGain * window;
                 }
+
+                // Reset output position to start reading from beginning
+                spectralOutputPos = 0;
             }
 
-            // Output from spectral buffer
-            if (spectralOverlapPos > 0 && spectralOverlapPos < fftSize)
+            // Output and consume from spectral buffer
+            if (spectralOutputPos < fftSize)
             {
-                wetL[i] = spectralOutputL[spectralOverlapPos];
-                wetR[i] = spectralOutputR[spectralOverlapPos];
+                wetL[i] = spectralOutputL[spectralOutputPos];
+                wetR[i] = spectralOutputR[spectralOutputPos];
+
+                // Clear consumed samples and shift remaining samples
+                spectralOutputL[spectralOutputPos] = 0.0f;
+                spectralOutputR[spectralOutputPos] = 0.0f;
+
+                spectralOutputPos++;
             }
             else
             {
+                // No output available yet, output silence
                 wetL[i] = 0.0f;
                 wetR[i] = 0.0f;
             }
