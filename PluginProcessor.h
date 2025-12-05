@@ -72,6 +72,63 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // Processing modes
+    enum ProcessingMode
+    {
+        MODE_GRANULAR = 0,
+        MODE_WSOLA = 1,
+        MODE_LOOPING = 2,
+        MODE_SPECTRAL = 3
+    };
+
+    // Correlator for pitch detection and grain alignment (Clouds-style)
+    class Correlator
+    {
+    public:
+        Correlator() : sampleRate_(44100.0), period_(0) {}
+
+        void setSampleRate(double sr) { sampleRate_ = sr; }
+
+        // Detect period/pitch of input signal
+        int detectPeriod(const float* samples, int numSamples, int minPeriod, int maxPeriod)
+        {
+            if (numSamples < maxPeriod * 2) return 0;
+
+            float bestCorrelation = -1.0f;
+            int bestPeriod = minPeriod;
+
+            // Autocorrelation to find period
+            for (int testPeriod = minPeriod; testPeriod < maxPeriod; ++testPeriod)
+            {
+                float correlation = 0.0f;
+                float energy = 0.0001f;
+
+                for (int i = 0; i < numSamples - testPeriod; ++i)
+                {
+                    correlation += samples[i] * samples[i + testPeriod];
+                    energy += samples[i] * samples[i];
+                }
+
+                correlation /= energy;
+
+                if (correlation > bestCorrelation)
+                {
+                    bestCorrelation = correlation;
+                    bestPeriod = testPeriod;
+                }
+            }
+
+            period_ = (bestCorrelation > 0.5f) ? bestPeriod : 0;
+            return period_;
+        }
+
+        int getPeriod() const { return period_; }
+
+    private:
+        double sampleRate_;
+        int period_;
+    };
+
     // Simple allpass filter for diffuser (no DSP module required)
     class SimpleAllpass
     {
@@ -139,6 +196,31 @@ private:
     SimpleAllpass diffuserL1, diffuserL2, diffuserL3;
     SimpleAllpass diffuserR1, diffuserR2, diffuserR3;
 
+    // Correlator for pitch detection and grain optimization
+    Correlator correlatorL, correlatorR;
+    int detectedPeriod = 0;
+    int correlatorUpdateCounter = 0;
+
+    // WSOLA state
+    double wsolaReadPos = 0.0;
+    int wsolaWindowSize = 2048;
+    int wsolaSearchWindow = 512;
+
+    // Looping mode state
+    double loopReadPos = 0.0;
+    int loopStartPos = 0;
+    int loopEndPos = 0;
+    int loopLength = 0;
+
+    // Spectral mode state
+    static constexpr int fftOrder = 11;
+    static constexpr int fftSize = 1 << fftOrder;  // 2048
+    juce::FFT forwardFFT { fftOrder };
+    std::array<float, fftSize * 2> fftDataL;
+    std::array<float, fftSize * 2> fftDataR;
+    std::array<float, fftSize> windowBuffer;
+    int spectralOverlapPos = 0;
+
     std::atomic<float> lastRandomizeValue { 0.0f };
 
     // Clouds-style density control
@@ -149,7 +231,7 @@ private:
     void launchGrains (int numToLaunch, int channel,
                        float positionParam, float sizeParam,
                        float pitchSemis, float textureParam,
-                       float stereoSpread);
+                       float stereoSpread, int periodHint = 0);
 
     float getSampleFromRing (int channel, double index) const;
     float getGrainEnvelope (double t, double duration, float textureParam) const;
@@ -157,6 +239,10 @@ private:
     // Clouds-style helper functions
     float fastInverseSqrt (float number) const;
     float computeOverlap (float density) const;
+
+    // WSOLA helper: find best matching segment
+    int findBestMatch (const float* reference, const float* searchBuffer,
+                       int searchLength, int windowSize);
 
     void randomizeParameters();
 

@@ -22,6 +22,9 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral
+    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 3, 0));
+
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.016f, 1.0f, 0.1f));  // 16ms to 1s (Clouds range)
     params.push_back (std::make_unique<juce::AudioParameterFloat>("pitch",    "Pitch",    -24.0f, 24.0f, 0.0f));
@@ -86,6 +89,12 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     diffuserR1.setDelay(delay1 + 7);  // Slight offset for stereo
     diffuserR2.setDelay(delay2 + 11);
     diffuserR3.setDelay(delay3 + 13);
+
+    // Initialize correlators
+    correlatorL.setSampleRate(sampleRate);
+    correlatorR.setSampleRate(sampleRate);
+    detectedPeriod = 0;
+    correlatorUpdateCounter = 0;
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -165,6 +174,40 @@ float CloudLikeGranularProcessor::fastInverseSqrt (float number) const
     return 1.0f / std::sqrt (number);
 }
 
+// WSOLA: Find best matching segment using correlation
+int CloudLikeGranularProcessor::findBestMatch (const float* reference, const float* searchBuffer,
+                                               int searchLength, int windowSize)
+{
+    float bestCorrelation = -1.0f;
+    int bestOffset = 0;
+
+    for (int offset = 0; offset < searchLength - windowSize; ++offset)
+    {
+        float correlation = 0.0f;
+        float refEnergy = 0.0001f;
+        float searchEnergy = 0.0001f;
+
+        // Compute normalized cross-correlation
+        for (int i = 0; i < windowSize; ++i)
+        {
+            correlation += reference[i] * searchBuffer[offset + i];
+            refEnergy += reference[i] * reference[i];
+            searchEnergy += searchBuffer[offset + i] * searchBuffer[offset + i];
+        }
+
+        // Normalize by energies
+        correlation /= std::sqrt(refEnergy * searchEnergy);
+
+        if (correlation > bestCorrelation)
+        {
+            bestCorrelation = correlation;
+            bestOffset = offset;
+        }
+    }
+
+    return bestOffset;
+}
+
 // Clouds-style overlap computation
 float CloudLikeGranularProcessor::computeOverlap (float density) const
 {
@@ -188,7 +231,7 @@ float CloudLikeGranularProcessor::computeOverlap (float density) const
 void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float positionParam, float sizeParam,
                                                float pitchSemis, float textureParam,
-                                               float stereoSpread)
+                                               float stereoSpread, int periodHint = 0)
 {
     // Safety check: ensure buffer is initialized and large enough
     if (bufferSize <= 0) return;
@@ -205,6 +248,14 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
 
     double offset    = (1.0f - positionParam) * maxOffset;
     double baseStart = (double) writeHead - offset;
+
+    // Align to period boundary if pitch detection succeeded
+    if (periodHint > 0 && periodHint < static_cast<int>(durationSamps * 0.5))
+    {
+        // Snap baseStart to nearest period boundary for more natural grain placement
+        double periodsFromStart = baseStart / periodHint;
+        baseStart = std::round(periodsFromStart) * periodHint;
+    }
 
     double pitchRatio = std::pow (2.0, pitchSemis / 12.0);
     float spreadWidth = stereoSpread;
@@ -284,6 +335,27 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
 
+    // Get processing mode
+    int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
+
+    // Run correlation analysis periodically (every 256 samples) for pitch detection
+    correlatorUpdateCounter += numSamples;
+    if (correlatorUpdateCounter >= 256)
+    {
+        correlatorUpdateCounter = 0;
+
+        // Analyze recent buffer content for period detection
+        int analysisLength = juce::jmin(2048, bufferSize / 4);
+        if (analysisLength > 0 && writeHead >= analysisLength)
+        {
+            const float* analysisData = ringBuffer.getReadPointer(0) + (writeHead - analysisLength);
+            int minPeriod = static_cast<int>(currentSampleRate / 1000.0);  // 1000 Hz max
+            int maxPeriod = static_cast<int>(currentSampleRate / 50.0);    // 50 Hz min
+
+            detectedPeriod = correlatorL.detectPeriod(analysisData, analysisLength, minPeriod, maxPeriod);
+        }
+    }
+
     auto position  = apvts.getRawParameterValue ("position")->load();
     auto size      = apvts.getRawParameterValue ("size")->load();
     auto pitch     = apvts.getRawParameterValue ("pitch")->load();
@@ -308,15 +380,19 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     float effectiveFeedback = freeze ? 1.0f : feedback;
 
-    // Clouds-style overlap and grain density calculation
-    float overlap = computeOverlap (density);
-    float targetNumGrains = maxGrains * overlap;
-    float grainRate = targetNumGrains / (maxGrains * 0.1f);  // Normalized rate
+    // MODE BRANCHING: Granular vs WSOLA
+    if (mode == MODE_GRANULAR)
+    {
+        // ========== GRANULAR MODE ==========
+        // Clouds-style overlap and grain density calculation
+        float overlap = computeOverlap (density);
+        float targetNumGrains = maxGrains * overlap;
+        float grainRate = targetNumGrains / (maxGrains * 0.1f);  // Normalized rate
 
-    // Determine seeding mode based on density
-    bool useDeterministic = density < 0.5f;
+        // Determine seeding mode based on density
+        bool useDeterministic = density < 0.5f;
 
-    for (int i = 0; i < numSamples; ++i)
+        for (int i = 0; i < numSamples; ++i)
     {
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
@@ -351,8 +427,9 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         if (triggerGrain)
         {
-            launchGrains (1, 0, position, size, pitch, texture, spread);
-            launchGrains (1, 1, position, size, pitch, texture, spread);
+            // Pass detected period for grain alignment optimization
+            launchGrains (1, 0, position, size, pitch, texture, spread, detectedPeriod);
+            launchGrains (1, 1, position, size, pitch, texture, spread, detectedPeriod);
         }
 
         float grainOutL = 0.0f, grainOutR = 0.0f;
@@ -467,9 +544,190 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             outputR = outputR * (1.0f - diffuserAmount) + diffusedR * diffuserAmount;
         }
 
-        wetL[i] = outputL;
-        wetR[i] = outputR;
-    }
+            wetL[i] = outputL;
+            wetR[i] = outputR;
+        }
+    }  // End of GRANULAR mode
+    else if (mode == MODE_WSOLA)
+    {
+        // ========== WSOLA MODE (Time-Stretching) ==========
+        // SIZE parameter controls time-stretch ratio (0.016-1.0 → 0.5x-2x speed)
+        float timeStretch = 0.5f + size * 1.5f;  // Maps 0-1 to 0.5-2.0x speed
+
+        int windowSize = wsolaWindowSize;
+        int hopOut = static_cast<int>(windowSize * 0.5f);  // Output hop
+        int hopIn = static_cast<int>(hopOut / timeStretch);  // Input hop (adjusted for stretch)
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Simple WSOLA: read with time-stretching
+            double readPos = wsolaReadPos;
+
+            // Ensure read position is within buffer
+            if (readPos < 0) readPos += bufferSize;
+            if (readPos >= bufferSize) readPos -= bufferSize;
+
+            // Read sample with interpolation
+            float outL = getSampleFromRing(0, readPos);
+            float outR = getSampleFromRing(1, readPos);
+
+            // Apply Hann window for smoothing
+            float windowPhase = std::fmod(wsolaReadPos, static_cast<double>(hopOut)) / hopOut;
+            float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * windowPhase));
+
+            wetL[i] = outL * window;
+            wetR[i] = outR * window;
+
+            // Advance read position based on time-stretch ratio
+            wsolaReadPos += timeStretch;
+            if (wsolaReadPos >= bufferSize) wsolaReadPos -= bufferSize;
+        }
+    }  // End of WSOLA mode
+    else if (mode == MODE_LOOPING)
+    {
+        // ========== LOOPING MODE (Looping Delay) ==========
+        // Define loop region: position controls where in buffer, size controls loop length
+        loopLength = static_cast<int>(size * currentSampleRate);  // Loop length in samples
+        loopLength = juce::jlimit(1024, bufferSize / 2, loopLength);
+
+        // Loop end position based on position parameter
+        double delayTime = position * (bufferSize - loopLength);
+        loopEndPos = writeHead - static_cast<int>(delayTime);
+        if (loopEndPos < 0) loopEndPos += bufferSize;
+
+        loopStartPos = loopEndPos - loopLength;
+        if (loopStartPos < 0) loopStartPos += bufferSize;
+
+        // Pitch ratio for playback speed
+        float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Read from loop with pitch shifting
+            int readPosInt = loopStartPos + static_cast<int>(loopReadPos);
+            if (readPosInt >= loopEndPos) readPosInt = loopStartPos;
+            if (readPosInt < 0) readPosInt += bufferSize;
+            readPosInt = readPosInt % bufferSize;
+
+            float outL = getSampleFromRing(0, readPosInt);
+            float outR = getSampleFromRing(1, readPosInt);
+
+            wetL[i] = outL;
+            wetR[i] = outR;
+
+            // Advance read position with pitch ratio
+            loopReadPos += pitchRatio;
+            if (loopReadPos >= loopLength)
+            {
+                loopReadPos -= loopLength;
+            }
+        }
+    }  // End of LOOPING mode
+    else if (mode == MODE_SPECTRAL)
+    {
+        // ========== SPECTRAL MODE (FFT-based processing) ==========
+        // Use SIZE to control grain/window size, PITCH for frequency shifting
+        float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Fill FFT buffer from ring buffer
+            if (spectralOverlapPos < fftSize)
+            {
+                // Read from delay position
+                double readPos = writeHead - position * (bufferSize - fftSize);
+                if (readPos < 0) readPos += bufferSize;
+
+                int readIdx = static_cast<int>(readPos + spectralOverlapPos) % bufferSize;
+
+                fftDataL[spectralOverlapPos] = ringBuffer.getSample(0, readIdx);
+                fftDataR[spectralOverlapPos] = ringBuffer.getSample(1, readIdx);
+            }
+
+            spectralOverlapPos++;
+
+            // Process when we have enough samples
+            if (spectralOverlapPos >= fftSize)
+            {
+                spectralOverlapPos = fftSize / 2;  // 50% overlap
+
+                // Apply Hann window
+                for (int n = 0; n < fftSize; ++n)
+                {
+                    float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * n / (fftSize - 1)));
+                    fftDataL[n] *= window;
+                    fftDataR[n] *= window;
+                }
+
+                // Perform FFT
+                forwardFFT.performFrequencyOnlyForwardTransform(fftDataL.data());
+                forwardFFT.performFrequencyOnlyForwardTransform(fftDataR.data());
+
+                // Spectral processing: simple pitch shift by bin shifting
+                std::array<float, fftSize * 2> shiftedL;
+                std::array<float, fftSize * 2> shiftedR;
+                shiftedL.fill(0.0f);
+                shiftedR.fill(0.0f);
+
+                // Shift frequency bins
+                for (int bin = 0; bin < fftSize / 2; ++bin)
+                {
+                    int targetBin = static_cast<int>(bin * pitchRatio);
+                    if (targetBin < fftSize / 2)
+                    {
+                        shiftedL[targetBin * 2] = fftDataL[bin * 2];
+                        shiftedL[targetBin * 2 + 1] = fftDataL[bin * 2 + 1];
+                        shiftedR[targetBin * 2] = fftDataR[bin * 2];
+                        shiftedR[targetBin * 2 + 1] = fftDataR[bin * 2 + 1];
+                    }
+                }
+
+                // Perform inverse FFT
+                forwardFFT.performFrequencyOnlyInverseTransform(shiftedL.data());
+                forwardFFT.performFrequencyOnlyInverseTransform(shiftedR.data());
+
+                // Copy output with overlap-add
+                float outputGain = 2.0f / fftSize;  // Normalization
+                wetL[i] = shiftedL[0] * outputGain;
+                wetR[i] = shiftedR[0] * outputGain;
+            }
+            else
+            {
+                wetL[i] = 0.0f;
+                wetR[i] = 0.0f;
+            }
+        }
+    }  // End of SPECTRAL mode
 
     // Update reverb parameters dynamically based on reverb amount
     juce::Reverb::Parameters rp;
