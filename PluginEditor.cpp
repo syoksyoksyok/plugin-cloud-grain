@@ -5,8 +5,13 @@
 CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
-    setSize (560, 280);
+    setSize (600, 280);
     startTimerHz (30);  // Update button states at 30Hz
+
+    setupKnob (modeKnob, "Mode");
+    modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
+    modeKnob.slider.setNumDecimalPlacesToDisplay(0);  // Display integers only
 
     setupKnob (positionKnob, "Position");
     setupKnob (sizeKnob,     "Size");
@@ -52,6 +57,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     auto& apvts = processor.apvts;
 
+    modeAttachment     = std::make_unique<SliderAttachment> (apvts, "mode",     modeKnob.slider);
     positionAttachment = std::make_unique<SliderAttachment> (apvts, "position", positionKnob.slider);
     sizeAttachment     = std::make_unique<SliderAttachment> (apvts, "size",     sizeKnob.slider);
     pitchAttachment    = std::make_unique<SliderAttachment> (apvts, "pitch",    pitchKnob.slider);
@@ -95,6 +101,9 @@ void CloudLikeGranularEditor::timerCallback()
         case 1: modeText = "MODE: WSOLA"; break;
         case 2: modeText = "MODE: Looping"; break;
         case 3: modeText = "MODE: Spectral"; break;
+        case 4: modeText = "MODE: Oliverb"; break;
+        case 5: modeText = "MODE: Resonestor"; break;
+        case 6: modeText = "MODE: Beat Repeat"; break;
         default: modeText = "MODE: Unknown"; break;
     }
 
@@ -168,23 +177,26 @@ void CloudLikeGranularEditor::resized()
     // Position mode label in top-right corner
     modeLabel.setBounds (titleArea.removeFromRight (140));
 
-    auto leftArea  = area.removeFromLeft (150);
+    auto leftArea  = area.removeFromLeft (80);  // Reduced from 150 to fit mode knob
     auto rightArea = area;
 
-    positionKnob.slider.setBounds (leftArea.reduced (10));
+    // Place mode knob on the left (same size as other knobs)
+    modeKnob.slider.setBounds (leftArea.reduced (5));
 
     auto buttonRow = rightArea.removeFromBottom (40);
     auto rowHeight = rightArea.getHeight() / 2;
     auto row1 = rightArea.removeFromTop (rowHeight);
     auto row2 = rightArea;
 
-    auto colWidth = row1.getWidth() / 4;
+    auto colWidth = row1.getWidth() / 5;  // Changed from 4 to 5 to fit position knob
 
     auto placeKnob = [] (Knob& k, juce::Rectangle<int> r)
     {
         k.slider.setBounds (r.reduced (10));
     };
 
+    // Position knob is now same size as other knobs
+    placeKnob (positionKnob, row1.removeFromLeft (colWidth));
     placeKnob (sizeKnob,     row1.removeFromLeft (colWidth));
     placeKnob (pitchKnob,    row1.removeFromLeft (colWidth));
     placeKnob (densityKnob,  row1.removeFromLeft (colWidth));

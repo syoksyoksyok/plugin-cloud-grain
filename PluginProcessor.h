@@ -78,7 +78,10 @@ private:
         MODE_GRANULAR = 0,
         MODE_WSOLA = 1,
         MODE_LOOPING = 2,
-        MODE_SPECTRAL = 3
+        MODE_SPECTRAL = 3,
+        MODE_OLIVERB = 4,      // Parasites: Creative reverb mode
+        MODE_RESONESTOR = 5,   // Parasites: Polyphonic resonator (Karplus-Strong)
+        MODE_BEAT_REPEAT = 6   // Parasites: Beat repeat/stutter effect
     };
 
     // Correlator for pitch detection and grain alignment (Clouds-style)
@@ -221,6 +224,40 @@ private:
     int spectralOverlapPos = 0;
     std::array<float, fftSize> spectralOutputL;
     std::array<float, fftSize> spectralOutputR;
+
+    // Oliverb mode state (Multi-tap reverb with modulation)
+    struct OliverbTap
+    {
+        std::vector<float> buffer;
+        int writePos = 0;
+        float modPhase = 0.0f;
+        float modDepth = 0.0f;
+    };
+    std::array<OliverbTap, 8> oliverbTaps;
+
+    // Resonestor mode state (Karplus-Strong resonators)
+    static constexpr int maxResonators = 12;
+    struct Resonator
+    {
+        std::vector<float> delayLine;
+        int writePos = 0;
+        float feedback = 0.0f;
+        float brightness = 0.5f;
+        bool active = false;
+    };
+    std::array<Resonator, maxResonators> resonators;
+
+    // Beat Repeat mode state
+    struct BeatRepeatState
+    {
+        std::vector<float> captureBufferL;
+        std::vector<float> captureBufferR;
+        int captureLength = 0;
+        int repeatPos = 0;
+        float stutterPhase = 0.0f;
+        bool isCapturing = false;
+    };
+    BeatRepeatState beatRepeat;
 
     std::atomic<float> lastRandomizeValue { 0.0f };
 

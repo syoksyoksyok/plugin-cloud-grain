@@ -22,8 +22,8 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral
-    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 3, 0));
+    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
+    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 6, 0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.016f, 1.0f, 0.1f));  // 16ms to 1s (Clouds range)
@@ -95,6 +95,41 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     correlatorR.setSampleRate(sampleRate);
     detectedPeriod = 0;
     correlatorUpdateCounter = 0;
+
+    // Initialize Oliverb taps (multi-tap delay with modulation)
+    const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
+    for (size_t i = 0; i < oliverbTaps.size(); ++i)
+    {
+        int tapSize = static_cast<int>(sampleRate * tapTimes[i]);
+        oliverbTaps[i].buffer.resize(tapSize, 0.0f);
+        oliverbTaps[i].writePos = 0;
+        oliverbTaps[i].modPhase = static_cast<float>(i) / 8.0f * juce::MathConstants<float>::twoPi;
+        oliverbTaps[i].modDepth = 0.002f * sampleRate;  // 2ms modulation depth
+    }
+
+    // Initialize Resonestor resonators (Karplus-Strong)
+    const std::array<float, maxResonators> resonatorFreqs = {
+        82.41f, 110.0f, 146.83f, 196.0f, 246.94f, 329.63f,  // E2, A2, D3, G3, B3, E4
+        392.0f, 493.88f, 587.33f, 659.25f, 783.99f, 987.77f  // G4, B4, D5, E5, G5, B5
+    };
+    for (int i = 0; i < maxResonators; ++i)
+    {
+        int delayLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        resonators[i].delayLine.resize(delayLength, 0.0f);
+        resonators[i].writePos = 0;
+        resonators[i].feedback = 0.99f;
+        resonators[i].brightness = 0.5f;
+        resonators[i].active = false;
+    }
+
+    // Initialize Beat Repeat buffer (1 bar at 120 BPM = 2 seconds)
+    int beatRepeatSize = static_cast<int>(sampleRate * 2.0);
+    beatRepeat.captureBufferL.resize(beatRepeatSize, 0.0f);
+    beatRepeat.captureBufferR.resize(beatRepeatSize, 0.0f);
+    beatRepeat.captureLength = beatRepeatSize / 4;  // Default to 1/4 bar
+    beatRepeat.repeatPos = 0;
+    beatRepeat.stutterPhase = 0.0f;
+    beatRepeat.isCapturing = false;
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -742,6 +777,237 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             }
         }
     }  // End of SPECTRAL mode
+    else if (mode == MODE_OLIVERB)
+    {
+        // ========== OLIVERB MODE (Creative Reverb) ==========
+        // Multi-tap delay with modulation for sustained, pitched reverb sounds
+        // POSITION: modulation rate, SIZE: decay time, PITCH: pitch shift, DENSITY: modulation depth, TEXTURE: diffusion
+
+        float modRate = 0.1f + position * 4.9f;  // 0.1 to 5 Hz
+        float decayTime = 0.2f + size * 4.8f;    // 0.2 to 5 seconds
+        float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+        float modDepth = density * 0.01f * currentSampleRate;  // Up to 10ms modulation
+        float diffusion = texture;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            float outputL = 0.0f;
+            float outputR = 0.0f;
+
+            // Process each tap
+            for (size_t t = 0; t < oliverbTaps.size(); ++t)
+            {
+                auto& tap = oliverbTaps[t];
+
+                // Update modulation phase
+                tap.modPhase += modRate * juce::MathConstants<float>::twoPi / currentSampleRate;
+                if (tap.modPhase > juce::MathConstants<float>::twoPi)
+                    tap.modPhase -= juce::MathConstants<float>::twoPi;
+
+                // Modulated read position
+                float mod = std::sin(tap.modPhase) * modDepth;
+                int readPos = tap.writePos - static_cast<int>(tap.buffer.size() * 0.5f + mod);
+                if (readPos < 0) readPos += tap.buffer.size();
+                readPos = readPos % tap.buffer.size();
+
+                // Read with interpolation
+                float delayed = tap.buffer[readPos];
+
+                // Calculate feedback with decay
+                float tapFeedback = std::pow(0.001f, 1.0f / (decayTime * currentSampleRate / tap.buffer.size()));
+
+                // Write input + feedback
+                float inputMix = (t % 2 == 0) ? inSampleL : inSampleR;
+                tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback;
+                tap.writePos = (tap.writePos + 1) % tap.buffer.size();
+
+                // Accumulate to output (alternate L/R)
+                if (t % 2 == 0)
+                    outputL += delayed * (1.0f - diffusion * 0.5f);
+                else
+                    outputR += delayed * (1.0f - diffusion * 0.5f);
+            }
+
+            // Apply diffusion (cross-mix)
+            float diffusedL = outputL * (1.0f - diffusion) + outputR * diffusion;
+            float diffusedR = outputR * (1.0f - diffusion) + outputL * diffusion;
+
+            wetL[i] = diffusedL * 0.25f;  // Normalize
+            wetR[i] = diffusedR * 0.25f;
+        }
+    }  // End of OLIVERB mode
+    else if (mode == MODE_RESONESTOR)
+    {
+        // ========== RESONESTOR MODE (Polyphonic Resonator / Karplus-Strong) ==========
+        // Plucked string synthesis using comb filters
+        // POSITION: excitation intensity, SIZE: decay time, PITCH: base pitch shift, DENSITY: string activation pattern, TEXTURE: brightness/damping
+
+        float excitation = position;
+        float decayTime = size;
+        float pitchShift = pitch;
+        float activationThreshold = 1.0f - density;  // Lower density = fewer active resonators
+        float brightness = texture;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            float outputL = 0.0f;
+            float outputR = 0.0f;
+
+            // Excite resonators based on input energy
+            float inputEnergy = std::abs(inSampleL) + std::abs(inSampleR);
+
+            // Process each resonator
+            for (int r = 0; r < maxResonators; ++r)
+            {
+                auto& res = resonators[r];
+
+                // Activate resonator based on density and input
+                if (inputEnergy > activationThreshold * 0.1f && uniform(rng) > activationThreshold)
+                {
+                    res.active = true;
+                    // Inject excitation noise
+                    float excite = (uniform(rng) * 2.0f - 1.0f) * excitation * inputEnergy;
+                    for (size_t n = 0; n < res.delayLine.size() && n < 10; ++n)
+                    {
+                        res.delayLine[(res.writePos + n) % res.delayLine.size()] += excite;
+                    }
+                }
+
+                if (res.active)
+                {
+                    // Read from delay line
+                    int readPos = res.writePos;
+                    float delayed = res.delayLine[readPos];
+
+                    // Low-pass filter for damping (brightness control)
+                    float damping = 0.5f + brightness * 0.5f;  // 0.5 to 1.0
+                    int prevPos = (readPos - 1 + res.delayLine.size()) % res.delayLine.size();
+                    float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
+
+                    // Feedback with decay
+                    float decay = 0.9f + decayTime * 0.099f;  // 0.9 to 0.999
+                    res.delayLine[res.writePos] = filtered * decay;
+
+                    res.writePos = (res.writePos + 1) % res.delayLine.size();
+
+                    // Accumulate to output (alternate L/R)
+                    if (r % 2 == 0)
+                        outputL += filtered;
+                    else
+                        outputR += filtered;
+
+                    // Deactivate if energy too low
+                    if (std::abs(filtered) < 0.0001f)
+                        res.active = false;
+                }
+            }
+
+            wetL[i] = outputL * 0.15f;  // Normalize
+            wetR[i] = outputR * 0.15f;
+        }
+    }  // End of RESONESTOR mode
+    else if (mode == MODE_BEAT_REPEAT)
+    {
+        // ========== BEAT REPEAT MODE (Stutter/Repeat Effect) ==========
+        // Captures and repeats audio segments rhythmically
+        // POSITION: capture point, SIZE: repeat length, PITCH: playback speed, DENSITY: repeat rate, TEXTURE: stutter intensity
+
+        float capturePos = position;
+        float repeatLength = size * 0.5f * currentSampleRate;  // Up to 0.5 seconds
+        float playbackSpeed = std::pow(2.0f, pitch / 12.0f);
+        float repeatRate = 1.0f + density * 15.0f;  // 1 to 16 repeats per second
+        float stutterAmount = texture;
+
+        // Update capture length based on size
+        beatRepeat.captureLength = juce::jlimit(512, static_cast<int>(beatRepeat.captureBufferL.size()),
+                                                static_cast<int>(repeatLength));
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Trigger capture based on repeat rate
+            beatRepeat.stutterPhase += repeatRate / currentSampleRate;
+            if (beatRepeat.stutterPhase >= 1.0f)
+            {
+                beatRepeat.stutterPhase -= 1.0f;
+                beatRepeat.isCapturing = true;
+                beatRepeat.repeatPos = 0;
+
+                // Capture from ring buffer at position
+                int captureStart = writeHead - static_cast<int>(capturePos * bufferSize);
+                if (captureStart < 0) captureStart += bufferSize;
+
+                for (int n = 0; n < beatRepeat.captureLength; ++n)
+                {
+                    int readIdx = (captureStart + n) % bufferSize;
+                    beatRepeat.captureBufferL[n] = ringBuffer.getSample(0, readIdx);
+                    beatRepeat.captureBufferR[n] = ringBuffer.getSample(1, readIdx);
+                }
+            }
+
+            // Playback captured buffer
+            if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
+            {
+                int readPos = static_cast<int>(beatRepeat.repeatPos) % beatRepeat.captureLength;
+
+                float outL = beatRepeat.captureBufferL[readPos];
+                float outR = beatRepeat.captureBufferR[readPos];
+
+                // Apply stutter envelope
+                float stutterEnv = 1.0f;
+                if (stutterAmount > 0.5f)
+                {
+                    float stutterFreq = (stutterAmount - 0.5f) * 40.0f + 2.0f;  // 2-20 Hz
+                    float stutterPhaseLocal = std::fmod(beatRepeat.repeatPos / beatRepeat.captureLength * stutterFreq, 1.0f);
+                    stutterEnv = stutterPhaseLocal < 0.5f ? 1.0f : 0.3f;
+                }
+
+                wetL[i] = outL * stutterEnv;
+                wetR[i] = outR * stutterEnv;
+
+                // Advance playback position with speed
+                beatRepeat.repeatPos += playbackSpeed;
+                if (beatRepeat.repeatPos >= beatRepeat.captureLength)
+                {
+                    beatRepeat.repeatPos = 0;
+                }
+            }
+            else
+            {
+                wetL[i] = 0.0f;
+                wetR[i] = 0.0f;
+            }
+        }
+    }  // End of BEAT_REPEAT mode
 
     // Update reverb parameters dynamically based on reverb amount
     juce::Reverb::Parameters rp;
