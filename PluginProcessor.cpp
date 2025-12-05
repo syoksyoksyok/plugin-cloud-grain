@@ -693,8 +693,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 }
 
                 // Perform forward FFT
-                forwardFFT.performFrequencyOnlyForwardTransform(fftDataL.data());
-                forwardFFT.performFrequencyOnlyForwardTransform(fftDataR.data());
+                forwardFFT.performRealOnlyForwardTransform(fftDataL.data());
+                forwardFFT.performRealOnlyForwardTransform(fftDataR.data());
 
                 // Frequency domain processing: simple bin shifting for pitch shift
                 std::array<float, fftSize * 2> shiftedL;
@@ -717,8 +717,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 }
 
                 // Perform inverse FFT
-                forwardFFT.performFrequencyOnlyInverseTransform(shiftedL.data());
-                forwardFFT.performFrequencyOnlyInverseTransform(shiftedR.data());
+                forwardFFT.performRealOnlyInverseTransform(shiftedL.data());
+                forwardFFT.performRealOnlyInverseTransform(shiftedR.data());
 
                 // Copy to output buffer with normalization
                 float normGain = 2.0f / fftSize;
