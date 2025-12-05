@@ -1,39 +1,14 @@
 // PluginEditor.cpp
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 //==============================================================================
 // KnobLookAndFeel implementation
 KnobLookAndFeel::KnobLookAndFeel()
 {
-    // Try multiple paths to find the knob sprite image
-    juce::Array<juce::File> searchPaths;
-
-    // 1. Current working directory / Resources
-    searchPaths.add (juce::File::getCurrentWorkingDirectory()
-                            .getChildFile ("Resources")
-                            .getChildFile ("knob.png"));
-
-    // 2. Executable directory / Resources
-    searchPaths.add (juce::File::getSpecialLocation (juce::File::currentExecutableFile)
-                            .getParentDirectory()
-                            .getChildFile ("Resources")
-                            .getChildFile ("knob.png"));
-
-    // 3. Executable directory (same folder)
-    searchPaths.add (juce::File::getSpecialLocation (juce::File::currentExecutableFile)
-                            .getParentDirectory()
-                            .getChildFile ("knob.png"));
-
-    // Try each path until we find the image
-    for (auto& path : searchPaths)
-    {
-        if (path.existsAsFile())
-        {
-            knobImage = juce::ImageCache::getFromFile (path);
-            if (knobImage.isValid())
-                break;
-        }
-    }
+    // Load knob image from embedded binary data
+    knobImage = juce::ImageCache::getFromMemory (BinaryData::knob_png,
+                                                  BinaryData::knob_pngSize);
 }
 
 bool KnobLookAndFeel::loadKnobImage (const juce::File& imageFile)
