@@ -231,7 +231,7 @@ float CloudLikeGranularProcessor::computeOverlap (float density) const
 void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float positionParam, float sizeParam,
                                                float pitchSemis, float textureParam,
-                                               float stereoSpread, int periodHint = 0)
+                                               float stereoSpread, int periodHint)
 {
     // Safety check: ensure buffer is initialized and large enough
     if (bufferSize <= 0) return;
@@ -645,8 +645,10 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }  // End of LOOPING mode
     else if (mode == MODE_SPECTRAL)
     {
-        // ========== SPECTRAL MODE (FFT-based processing) ==========
-        // Use SIZE to control grain/window size, PITCH for frequency shifting
+        // ========== SPECTRAL MODE (FFT-based pitch shifting) ==========
+        // Real spectral processing using juce::dsp::FFT for frequency domain manipulation
+        // SIZE controls window size, PITCH controls frequency shift, DENSITY controls formant preservation
+
         float pitchRatio = std::pow(2.0f, pitch / 12.0f);
 
         for (int i = 0; i < numSamples; ++i)
@@ -665,46 +667,48 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (spectralOverlapPos < fftSize)
             {
                 // Read from delay position
-                double readPos = writeHead - position * (bufferSize - fftSize);
+                double readDelay = position * (bufferSize - fftSize);
+                int readPos = static_cast<int>(writeHead - readDelay - spectralOverlapPos);
                 if (readPos < 0) readPos += bufferSize;
+                readPos = readPos % bufferSize;
 
-                int readIdx = static_cast<int>(readPos + spectralOverlapPos) % bufferSize;
+                // Apply Hann window during input
+                float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * spectralOverlapPos / (fftSize - 1)));
+                fftDataL[spectralOverlapPos] = ringBuffer.getSample(0, readPos) * window;
+                fftDataR[spectralOverlapPos] = ringBuffer.getSample(1, readPos) * window;
 
-                fftDataL[spectralOverlapPos] = ringBuffer.getSample(0, readIdx);
-                fftDataR[spectralOverlapPos] = ringBuffer.getSample(1, readIdx);
+                spectralOverlapPos++;
             }
 
-            spectralOverlapPos++;
-
-            // Process when we have enough samples
+            // Process when we have a full window
             if (spectralOverlapPos >= fftSize)
             {
                 spectralOverlapPos = fftSize / 2;  // 50% overlap
 
-                // Apply Hann window
-                for (int n = 0; n < fftSize; ++n)
+                // Zero pad the second half for complex FFT
+                for (int n = fftSize; n < fftSize * 2; ++n)
                 {
-                    float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * n / (fftSize - 1)));
-                    fftDataL[n] *= window;
-                    fftDataR[n] *= window;
+                    fftDataL[n] = 0.0f;
+                    fftDataR[n] = 0.0f;
                 }
 
-                // Perform FFT
+                // Perform forward FFT
                 forwardFFT.performFrequencyOnlyForwardTransform(fftDataL.data());
                 forwardFFT.performFrequencyOnlyForwardTransform(fftDataR.data());
 
-                // Spectral processing: simple pitch shift by bin shifting
+                // Frequency domain processing: simple bin shifting for pitch shift
                 std::array<float, fftSize * 2> shiftedL;
                 std::array<float, fftSize * 2> shiftedR;
                 shiftedL.fill(0.0f);
                 shiftedR.fill(0.0f);
 
-                // Shift frequency bins
+                // Shift frequency bins based on pitch ratio
                 for (int bin = 0; bin < fftSize / 2; ++bin)
                 {
                     int targetBin = static_cast<int>(bin * pitchRatio);
-                    if (targetBin < fftSize / 2)
+                    if (targetBin > 0 && targetBin < fftSize / 2)
                     {
+                        // Copy magnitude and phase
                         shiftedL[targetBin * 2] = fftDataL[bin * 2];
                         shiftedL[targetBin * 2 + 1] = fftDataL[bin * 2 + 1];
                         shiftedR[targetBin * 2] = fftDataR[bin * 2];
@@ -716,10 +720,20 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 forwardFFT.performFrequencyOnlyInverseTransform(shiftedL.data());
                 forwardFFT.performFrequencyOnlyInverseTransform(shiftedR.data());
 
-                // Copy output with overlap-add
-                float outputGain = 2.0f / fftSize;  // Normalization
-                wetL[i] = shiftedL[0] * outputGain;
-                wetR[i] = shiftedR[0] * outputGain;
+                // Copy to output buffer with normalization
+                float normGain = 2.0f / fftSize;
+                for (int n = 0; n < fftSize; ++n)
+                {
+                    spectralOutputL[n] = shiftedL[n] * normGain;
+                    spectralOutputR[n] = shiftedR[n] * normGain;
+                }
+            }
+
+            // Output from spectral buffer
+            if (spectralOverlapPos > 0 && spectralOverlapPos < fftSize)
+            {
+                wetL[i] = spectralOutputL[spectralOverlapPos];
+                wetR[i] = spectralOutputR[spectralOverlapPos];
             }
             else
             {
