@@ -180,6 +180,83 @@ private:
     static constexpr double ringBufferSeconds = 4.0;
     static constexpr float minGrainsPerSecond = 4.0f;
     static constexpr float maxGrainsPerSecond = 100.0f;
+
+    // ========== OPTIMIZATION: Look-Up Tables ==========
+    static constexpr int SINE_TABLE_SIZE = 2048;
+    static constexpr int HANN_WINDOW_SIZE = 2048;
+    static constexpr int PITCH_LUT_SIZE = 49;  // -24 to +24 semitones
+
+    std::array<float, SINE_TABLE_SIZE> sineLUT;
+    std::array<float, SINE_TABLE_SIZE> cosineLUT;
+    std::array<float, HANN_WINDOW_SIZE> hannWindowLUT;
+    std::array<float, PITCH_LUT_SIZE> pitchRatioLUT;
+
+    // Fast LUT access helpers
+    inline float fastSin(float phase) const {
+        int index = static_cast<int>(phase * SINE_TABLE_SIZE / juce::MathConstants<float>::twoPi) & (SINE_TABLE_SIZE - 1);
+        return sineLUT[index];
+    }
+
+    inline float fastCos(float phase) const {
+        int index = static_cast<int>(phase * SINE_TABLE_SIZE / juce::MathConstants<float>::twoPi) & (SINE_TABLE_SIZE - 1);
+        return cosineLUT[index];
+    }
+
+    inline float hannWindow(int position, int windowSize) const {
+        if (windowSize != HANN_WINDOW_SIZE) {
+            // Fallback for non-standard sizes
+            float x = static_cast<float>(position) / (windowSize - 1);
+            return 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * x));
+        }
+        return hannWindowLUT[position];
+    }
+
+    inline float pitchToRatio(float semitones) const {
+        int index = static_cast<int>(semitones) + 24;  // Offset by 24 (-24 to +24 -> 0 to 48)
+        if (index < 0 || index >= PITCH_LUT_SIZE)
+            return std::pow(2.0f, semitones / 12.0f);  // Fallback
+
+        // Linear interpolation for sub-semitone accuracy
+        float frac = semitones - std::floor(semitones);
+        if (index + 1 < PITCH_LUT_SIZE)
+            return pitchRatioLUT[index] + frac * (pitchRatioLUT[index + 1] - pitchRatioLUT[index]);
+        return pitchRatioLUT[index];
+    }
+
+    // ========== OPTIMIZATION: Parameter Smoothing ==========
+    struct SmoothedParameter {
+        float current = 0.0f;
+        float target = 0.0f;
+        float coefficient = 0.01f;  // 1ms smoothing at 44.1kHz
+
+        void reset(float value) {
+            current = target = value;
+        }
+
+        void setTarget(float newTarget) {
+            target = newTarget;
+        }
+
+        float getNext() {
+            current += (target - current) * coefficient;
+            return current;
+        }
+
+        float getCurrentValue() const {
+            return current;
+        }
+    };
+
+    SmoothedParameter smoothedPosition;
+    SmoothedParameter smoothedSize;
+    SmoothedParameter smoothedPitch;
+    SmoothedParameter smoothedDensity;
+    SmoothedParameter smoothedTexture;
+    SmoothedParameter smoothedSpread;
+    SmoothedParameter smoothedFeedback;
+    SmoothedParameter smoothedMix;
+    SmoothedParameter smoothedReverb;
+
     std::array<Grain, maxGrains> grains;
     std::vector<int> freeGrainIndices;
 
