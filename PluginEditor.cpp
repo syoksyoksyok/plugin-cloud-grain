@@ -91,26 +91,109 @@ void CloudLikeGranularEditor::timerCallback()
         repaint();  // Repaint entire editor to update button highlights
     }
 
-    // Update mode label based on mode parameter
+    // Update mode label and knob labels based on mode parameter
     int mode = static_cast<int>(processor.apvts.getRawParameterValue ("mode")->load());
     juce::String modeText;
 
+    // Define knob labels for each mode
+    juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
+
     switch (mode)
     {
-        case 0: modeText = "MODE: Granular"; break;
-        case 1: modeText = "MODE: WSOLA"; break;
-        case 2: modeText = "MODE: Looping"; break;
-        case 3: modeText = "MODE: Spectral"; break;
-        case 4: modeText = "MODE: Oliverb"; break;
-        case 5: modeText = "MODE: Resonestor"; break;
-        case 6: modeText = "MODE: Beat Repeat"; break;
-        default: modeText = "MODE: Unknown"; break;
+        case 0: // Granular
+            modeText = "MODE: Granular";
+            posLabel = "Position";
+            sizeLabel = "Size";
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 1: // WSOLA
+            modeText = "MODE: WSOLA";
+            posLabel = "Position";
+            sizeLabel = "Stretch";
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 2: // Looping
+            modeText = "MODE: Looping";
+            posLabel = "LoopPos";
+            sizeLabel = "LoopLen";
+            pitchLabel = "Speed";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 3: // Spectral
+            modeText = "MODE: Spectral";
+            posLabel = "Delay";
+            sizeLabel = "Window";
+            pitchLabel = "FreqShft";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
+
+        case 4: // Oliverb
+            modeText = "MODE: Oliverb";
+            posLabel = "ModRate";
+            sizeLabel = "Decay";
+            pitchLabel = "Pitch";
+            densityLabel = "ModDepth";
+            textureLabel = "Diffuse";
+            break;
+
+        case 5: // Resonestor
+            modeText = "MODE: Resonestor";
+            posLabel = "Excite";
+            sizeLabel = "Decay";
+            pitchLabel = "Pitch";
+            densityLabel = "Pattern";
+            textureLabel = "Bright";
+            break;
+
+        case 6: // Beat Repeat
+            modeText = "MODE: Beat Repeat";
+            posLabel = "Capture";
+            sizeLabel = "Length";
+            pitchLabel = "Speed";
+            densityLabel = "Rate";
+            textureLabel = "Stutter";
+            break;
+
+        default:
+            modeText = "MODE: Unknown";
+            posLabel = "Position";
+            sizeLabel = "Size";
+            pitchLabel = "Pitch";
+            densityLabel = "Density";
+            textureLabel = "Texture";
+            break;
     }
 
+    // Update mode label
     if (modeLabel.getText() != modeText)
     {
         modeLabel.setText (modeText, juce::dontSendNotification);
     }
+
+    // Update knob labels
+    if (positionKnob.label.getText() != posLabel)
+        positionKnob.label.setText (posLabel, juce::dontSendNotification);
+
+    if (sizeKnob.label.getText() != sizeLabel)
+        sizeKnob.label.setText (sizeLabel, juce::dontSendNotification);
+
+    if (pitchKnob.label.getText() != pitchLabel)
+        pitchKnob.label.setText (pitchLabel, juce::dontSendNotification);
+
+    if (densityKnob.label.getText() != densityLabel)
+        densityKnob.label.setText (densityLabel, juce::dontSendNotification);
+
+    if (textureKnob.label.getText() != textureLabel)
+        textureKnob.label.setText (textureLabel, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
