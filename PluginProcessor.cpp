@@ -22,8 +22,8 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Mode selection: 0 = Granular, 1 = WSOLA
-    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 1, 0));
+    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral
+    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 3, 0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.016f, 1.0f, 0.1f));  // 16ms to 1s (Clouds range)
@@ -593,6 +593,141 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (wsolaReadPos >= bufferSize) wsolaReadPos -= bufferSize;
         }
     }  // End of WSOLA mode
+    else if (mode == MODE_LOOPING)
+    {
+        // ========== LOOPING MODE (Looping Delay) ==========
+        // Define loop region: position controls where in buffer, size controls loop length
+        loopLength = static_cast<int>(size * currentSampleRate);  // Loop length in samples
+        loopLength = juce::jlimit(1024, bufferSize / 2, loopLength);
+
+        // Loop end position based on position parameter
+        double delayTime = position * (bufferSize - loopLength);
+        loopEndPos = writeHead - static_cast<int>(delayTime);
+        if (loopEndPos < 0) loopEndPos += bufferSize;
+
+        loopStartPos = loopEndPos - loopLength;
+        if (loopStartPos < 0) loopStartPos += bufferSize;
+
+        // Pitch ratio for playback speed
+        float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Read from loop with pitch shifting
+            int readPosInt = loopStartPos + static_cast<int>(loopReadPos);
+            if (readPosInt >= loopEndPos) readPosInt = loopStartPos;
+            if (readPosInt < 0) readPosInt += bufferSize;
+            readPosInt = readPosInt % bufferSize;
+
+            float outL = getSampleFromRing(0, readPosInt);
+            float outR = getSampleFromRing(1, readPosInt);
+
+            wetL[i] = outL;
+            wetR[i] = outR;
+
+            // Advance read position with pitch ratio
+            loopReadPos += pitchRatio;
+            if (loopReadPos >= loopLength)
+            {
+                loopReadPos -= loopLength;
+            }
+        }
+    }  // End of LOOPING mode
+    else if (mode == MODE_SPECTRAL)
+    {
+        // ========== SPECTRAL MODE (FFT-based processing) ==========
+        // Use SIZE to control grain/window size, PITCH for frequency shifting
+        float pitchRatio = std::pow(2.0f, pitch / 12.0f);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Fill FFT buffer from ring buffer
+            if (spectralOverlapPos < fftSize)
+            {
+                // Read from delay position
+                double readPos = writeHead - position * (bufferSize - fftSize);
+                if (readPos < 0) readPos += bufferSize;
+
+                int readIdx = static_cast<int>(readPos + spectralOverlapPos) % bufferSize;
+
+                fftDataL[spectralOverlapPos] = ringBuffer.getSample(0, readIdx);
+                fftDataR[spectralOverlapPos] = ringBuffer.getSample(1, readIdx);
+            }
+
+            spectralOverlapPos++;
+
+            // Process when we have enough samples
+            if (spectralOverlapPos >= fftSize)
+            {
+                spectralOverlapPos = fftSize / 2;  // 50% overlap
+
+                // Apply Hann window
+                for (int n = 0; n < fftSize; ++n)
+                {
+                    float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * n / (fftSize - 1)));
+                    fftDataL[n] *= window;
+                    fftDataR[n] *= window;
+                }
+
+                // Perform FFT
+                forwardFFT.performFrequencyOnlyForwardTransform(fftDataL.data());
+                forwardFFT.performFrequencyOnlyForwardTransform(fftDataR.data());
+
+                // Spectral processing: simple pitch shift by bin shifting
+                std::array<float, fftSize * 2> shiftedL;
+                std::array<float, fftSize * 2> shiftedR;
+                shiftedL.fill(0.0f);
+                shiftedR.fill(0.0f);
+
+                // Shift frequency bins
+                for (int bin = 0; bin < fftSize / 2; ++bin)
+                {
+                    int targetBin = static_cast<int>(bin * pitchRatio);
+                    if (targetBin < fftSize / 2)
+                    {
+                        shiftedL[targetBin * 2] = fftDataL[bin * 2];
+                        shiftedL[targetBin * 2 + 1] = fftDataL[bin * 2 + 1];
+                        shiftedR[targetBin * 2] = fftDataR[bin * 2];
+                        shiftedR[targetBin * 2 + 1] = fftDataR[bin * 2 + 1];
+                    }
+                }
+
+                // Perform inverse FFT
+                forwardFFT.performFrequencyOnlyInverseTransform(shiftedL.data());
+                forwardFFT.performFrequencyOnlyInverseTransform(shiftedR.data());
+
+                // Copy output with overlap-add
+                float outputGain = 2.0f / fftSize;  // Normalization
+                wetL[i] = shiftedL[0] * outputGain;
+                wetR[i] = shiftedR[0] * outputGain;
+            }
+            else
+            {
+                wetL[i] = 0.0f;
+                wetR[i] = 0.0f;
+            }
+        }
+    }  // End of SPECTRAL mode
 
     // Update reverb parameters dynamically based on reverb amount
     juce::Reverb::Parameters rp;

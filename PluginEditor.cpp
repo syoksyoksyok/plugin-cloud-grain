@@ -87,7 +87,16 @@ void CloudLikeGranularEditor::timerCallback()
 
     // Update mode label based on mode parameter
     int mode = static_cast<int>(processor.apvts.getRawParameterValue ("mode")->load());
-    juce::String modeText = (mode == 0) ? "MODE: Granular" : "MODE: WSOLA";
+    juce::String modeText;
+
+    switch (mode)
+    {
+        case 0: modeText = "MODE: Granular"; break;
+        case 1: modeText = "MODE: WSOLA"; break;
+        case 2: modeText = "MODE: Looping"; break;
+        case 3: modeText = "MODE: Spectral"; break;
+        default: modeText = "MODE: Unknown"; break;
+    }
 
     if (modeLabel.getText() != modeText)
     {

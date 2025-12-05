@@ -76,7 +76,9 @@ private:
     enum ProcessingMode
     {
         MODE_GRANULAR = 0,
-        MODE_WSOLA = 1
+        MODE_WSOLA = 1,
+        MODE_LOOPING = 2,
+        MODE_SPECTRAL = 3
     };
 
     // Correlator for pitch detection and grain alignment (Clouds-style)
@@ -203,6 +205,21 @@ private:
     double wsolaReadPos = 0.0;
     int wsolaWindowSize = 2048;
     int wsolaSearchWindow = 512;
+
+    // Looping mode state
+    double loopReadPos = 0.0;
+    int loopStartPos = 0;
+    int loopEndPos = 0;
+    int loopLength = 0;
+
+    // Spectral mode state
+    static constexpr int fftOrder = 11;
+    static constexpr int fftSize = 1 << fftOrder;  // 2048
+    juce::FFT forwardFFT { fftOrder };
+    std::array<float, fftSize * 2> fftDataL;
+    std::array<float, fftSize * 2> fftDataR;
+    std::array<float, fftSize> windowBuffer;
+    int spectralOverlapPos = 0;
 
     std::atomic<float> lastRandomizeValue { 0.0f };
 
