@@ -29,7 +29,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     // Style mode label
     modeLabel.setFont (juce::Font (16.0f, juce::Font::bold));
-    modeLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (100, 255, 100));
+    modeLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     modeLabel.setJustificationType (juce::Justification::centred);
 
     // Style Freeze button with colors
@@ -222,12 +222,6 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         bounds.getHeight()
     ));
     g.fillAll();
-
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (20.0f, juce::Font::bold));
-    g.drawFittedText ("Granular Texture",
-                      10, 5, getWidth() - 160, 24,
-                      juce::Justification::centred, 1);
 
     // Draw highlight around Freeze button when active
     if (freezeButton.getToggleState())
