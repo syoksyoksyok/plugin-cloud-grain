@@ -174,6 +174,40 @@ float CloudLikeGranularProcessor::fastInverseSqrt (float number) const
     return 1.0f / std::sqrt (number);
 }
 
+// WSOLA: Find best matching segment using correlation
+int CloudLikeGranularProcessor::findBestMatch (const float* reference, const float* searchBuffer,
+                                               int searchLength, int windowSize)
+{
+    float bestCorrelation = -1.0f;
+    int bestOffset = 0;
+
+    for (int offset = 0; offset < searchLength - windowSize; ++offset)
+    {
+        float correlation = 0.0f;
+        float refEnergy = 0.0001f;
+        float searchEnergy = 0.0001f;
+
+        // Compute normalized cross-correlation
+        for (int i = 0; i < windowSize; ++i)
+        {
+            correlation += reference[i] * searchBuffer[offset + i];
+            refEnergy += reference[i] * reference[i];
+            searchEnergy += searchBuffer[offset + i] * searchBuffer[offset + i];
+        }
+
+        // Normalize by energies
+        correlation /= std::sqrt(refEnergy * searchEnergy);
+
+        if (correlation > bestCorrelation)
+        {
+            bestCorrelation = correlation;
+            bestOffset = offset;
+        }
+    }
+
+    return bestOffset;
+}
+
 // Clouds-style overlap computation
 float CloudLikeGranularProcessor::computeOverlap (float density) const
 {
@@ -346,15 +380,19 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     float effectiveFeedback = freeze ? 1.0f : feedback;
 
-    // Clouds-style overlap and grain density calculation
-    float overlap = computeOverlap (density);
-    float targetNumGrains = maxGrains * overlap;
-    float grainRate = targetNumGrains / (maxGrains * 0.1f);  // Normalized rate
+    // MODE BRANCHING: Granular vs WSOLA
+    if (mode == MODE_GRANULAR)
+    {
+        // ========== GRANULAR MODE ==========
+        // Clouds-style overlap and grain density calculation
+        float overlap = computeOverlap (density);
+        float targetNumGrains = maxGrains * overlap;
+        float grainRate = targetNumGrains / (maxGrains * 0.1f);  // Normalized rate
 
-    // Determine seeding mode based on density
-    bool useDeterministic = density < 0.5f;
+        // Determine seeding mode based on density
+        bool useDeterministic = density < 0.5f;
 
-    for (int i = 0; i < numSamples; ++i)
+        for (int i = 0; i < numSamples; ++i)
     {
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
@@ -506,9 +544,55 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             outputR = outputR * (1.0f - diffuserAmount) + diffusedR * diffuserAmount;
         }
 
-        wetL[i] = outputL;
-        wetR[i] = outputR;
-    }
+            wetL[i] = outputL;
+            wetR[i] = outputR;
+        }
+    }  // End of GRANULAR mode
+    else if (mode == MODE_WSOLA)
+    {
+        // ========== WSOLA MODE (Time-Stretching) ==========
+        // SIZE parameter controls time-stretch ratio (0.016-1.0 → 0.5x-2x speed)
+        float timeStretch = 0.5f + size * 1.5f;  // Maps 0-1 to 0.5-2.0x speed
+
+        int windowSize = wsolaWindowSize;
+        int hopOut = static_cast<int>(windowSize * 0.5f);  // Output hop
+        int hopIn = static_cast<int>(hopOut / timeStretch);  // Input hop (adjusted for stretch)
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float inSampleL = inL[i];
+            float inSampleR = inR ? inR[i] : inSampleL;
+
+            if (!freeze && bufferSize > 0)
+            {
+                ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * effectiveFeedback);
+                ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * effectiveFeedback);
+                writeHead = (writeHead + 1) % bufferSize;
+            }
+
+            // Simple WSOLA: read with time-stretching
+            double readPos = wsolaReadPos;
+
+            // Ensure read position is within buffer
+            if (readPos < 0) readPos += bufferSize;
+            if (readPos >= bufferSize) readPos -= bufferSize;
+
+            // Read sample with interpolation
+            float outL = getSampleFromRing(0, readPos);
+            float outR = getSampleFromRing(1, readPos);
+
+            // Apply Hann window for smoothing
+            float windowPhase = std::fmod(wsolaReadPos, static_cast<double>(hopOut)) / hopOut;
+            float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * windowPhase));
+
+            wetL[i] = outL * window;
+            wetR[i] = outR * window;
+
+            // Advance read position based on time-stretch ratio
+            wsolaReadPos += timeStretch;
+            if (wsolaReadPos >= bufferSize) wsolaReadPos -= bufferSize;
+        }
+    }  // End of WSOLA mode
 
     // Update reverb parameters dynamically based on reverb amount
     juce::Reverb::Parameters rp;

@@ -199,6 +199,11 @@ private:
     int detectedPeriod = 0;
     int correlatorUpdateCounter = 0;
 
+    // WSOLA state
+    double wsolaReadPos = 0.0;
+    int wsolaWindowSize = 2048;
+    int wsolaSearchWindow = 512;
+
     std::atomic<float> lastRandomizeValue { 0.0f };
 
     // Clouds-style density control
@@ -217,6 +222,10 @@ private:
     // Clouds-style helper functions
     float fastInverseSqrt (float number) const;
     float computeOverlap (float density) const;
+
+    // WSOLA helper: find best matching segment
+    int findBestMatch (const float* reference, const float* searchBuffer,
+                       int searchLength, int windowSize);
 
     void randomizeParameters();
 
