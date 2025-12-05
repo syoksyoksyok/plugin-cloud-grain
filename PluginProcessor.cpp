@@ -22,6 +22,9 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+    // Mode selection: 0 = Granular, 1 = WSOLA
+    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 1, 0));
+
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.016f, 1.0f, 0.1f));  // 16ms to 1s (Clouds range)
     params.push_back (std::make_unique<juce::AudioParameterFloat>("pitch",    "Pitch",    -24.0f, 24.0f, 0.0f));
@@ -86,6 +89,12 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     diffuserR1.setDelay(delay1 + 7);  // Slight offset for stereo
     diffuserR2.setDelay(delay2 + 11);
     diffuserR3.setDelay(delay3 + 13);
+
+    // Initialize correlators
+    correlatorL.setSampleRate(sampleRate);
+    correlatorR.setSampleRate(sampleRate);
+    detectedPeriod = 0;
+    correlatorUpdateCounter = 0;
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -188,7 +197,7 @@ float CloudLikeGranularProcessor::computeOverlap (float density) const
 void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float positionParam, float sizeParam,
                                                float pitchSemis, float textureParam,
-                                               float stereoSpread)
+                                               float stereoSpread, int periodHint = 0)
 {
     // Safety check: ensure buffer is initialized and large enough
     if (bufferSize <= 0) return;
@@ -205,6 +214,14 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
 
     double offset    = (1.0f - positionParam) * maxOffset;
     double baseStart = (double) writeHead - offset;
+
+    // Align to period boundary if pitch detection succeeded
+    if (periodHint > 0 && periodHint < static_cast<int>(durationSamps * 0.5))
+    {
+        // Snap baseStart to nearest period boundary for more natural grain placement
+        double periodsFromStart = baseStart / periodHint;
+        baseStart = std::round(periodsFromStart) * periodHint;
+    }
 
     double pitchRatio = std::pow (2.0, pitchSemis / 12.0);
     float spreadWidth = stereoSpread;
@@ -284,6 +301,27 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
 
+    // Get processing mode
+    int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
+
+    // Run correlation analysis periodically (every 256 samples) for pitch detection
+    correlatorUpdateCounter += numSamples;
+    if (correlatorUpdateCounter >= 256)
+    {
+        correlatorUpdateCounter = 0;
+
+        // Analyze recent buffer content for period detection
+        int analysisLength = juce::jmin(2048, bufferSize / 4);
+        if (analysisLength > 0 && writeHead >= analysisLength)
+        {
+            const float* analysisData = ringBuffer.getReadPointer(0) + (writeHead - analysisLength);
+            int minPeriod = static_cast<int>(currentSampleRate / 1000.0);  // 1000 Hz max
+            int maxPeriod = static_cast<int>(currentSampleRate / 50.0);    // 50 Hz min
+
+            detectedPeriod = correlatorL.detectPeriod(analysisData, analysisLength, minPeriod, maxPeriod);
+        }
+    }
+
     auto position  = apvts.getRawParameterValue ("position")->load();
     auto size      = apvts.getRawParameterValue ("size")->load();
     auto pitch     = apvts.getRawParameterValue ("pitch")->load();
@@ -351,8 +389,9 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         if (triggerGrain)
         {
-            launchGrains (1, 0, position, size, pitch, texture, spread);
-            launchGrains (1, 1, position, size, pitch, texture, spread);
+            // Pass detected period for grain alignment optimization
+            launchGrains (1, 0, position, size, pitch, texture, spread, detectedPeriod);
+            launchGrains (1, 1, position, size, pitch, texture, spread, detectedPeriod);
         }
 
         float grainOutL = 0.0f, grainOutR = 0.0f;
