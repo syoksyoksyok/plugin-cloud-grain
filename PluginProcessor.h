@@ -362,5 +362,45 @@ private:
 
     void randomizeParameters();
 
+    // ========== OPTIMIZATION: Block Processing Functions ==========
+    // Mode-specific block processing for better cache locality and reduced branching
+    void processGranularBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                               float* wetL, float* wetR,
+                               float position, float size, float pitch, float density,
+                               float texture, float spread, float feedback, bool freeze);
+
+    void processWSOLABlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                            float* wetL, float* wetR,
+                            float position, float size, float pitch,
+                            float feedback, bool freeze);
+
+    void processLoopingBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                              float* wetL, float* wetR,
+                              float position, float size, float pitch,
+                              float feedback, bool freeze);
+
+    void processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                               float* wetL, float* wetR,
+                               float position, float pitch,
+                               float feedback, bool freeze);
+
+    void processOliverbBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                              float* wetL, float* wetR,
+                              float position, float size, float pitch,
+                              float density, float texture,
+                              float feedback, bool freeze);
+
+    void processResonestorBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                 float* wetL, float* wetR,
+                                 float position, float size, float pitch,
+                                 float density, float texture,
+                                 float feedback, bool freeze);
+
+    void processBeatRepeatBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                 float* wetL, float* wetR,
+                                 float position, float size, float pitch,
+                                 float density, float texture,
+                                 float feedback, bool freeze);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularProcessor)
 };
