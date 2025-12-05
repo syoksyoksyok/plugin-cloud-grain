@@ -5,14 +5,34 @@
 // KnobLookAndFeel implementation
 KnobLookAndFeel::KnobLookAndFeel()
 {
-    // Load the knob sprite image
-    juce::File knobFile = juce::File::getCurrentWorkingDirectory()
-                                     .getChildFile ("Resources")
-                                     .getChildFile ("knob.png");
+    // Try multiple paths to find the knob sprite image
+    juce::Array<juce::File> searchPaths;
 
-    if (knobFile.existsAsFile())
+    // 1. Current working directory / Resources
+    searchPaths.add (juce::File::getCurrentWorkingDirectory()
+                            .getChildFile ("Resources")
+                            .getChildFile ("knob.png"));
+
+    // 2. Executable directory / Resources
+    searchPaths.add (juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+                            .getParentDirectory()
+                            .getChildFile ("Resources")
+                            .getChildFile ("knob.png"));
+
+    // 3. Executable directory (same folder)
+    searchPaths.add (juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+                            .getParentDirectory()
+                            .getChildFile ("knob.png"));
+
+    // Try each path until we find the image
+    for (auto& path : searchPaths)
     {
-        knobImage = juce::ImageCache::getFromFile (knobFile);
+        if (path.existsAsFile())
+        {
+            knobImage = juce::ImageCache::getFromFile (path);
+            if (knobImage.isValid())
+                break;
+        }
     }
 }
 
@@ -27,15 +47,14 @@ bool KnobLookAndFeel::loadKnobImage (const juce::File& imageFile)
 }
 
 void KnobLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                                       float sliderPosProportional, float /*rotaryStartAngle*/,
-                                       float /*rotaryEndAngle*/, juce::Slider& /*slider*/)
+                                       float sliderPosProportional, float rotaryStartAngle,
+                                       float rotaryEndAngle, juce::Slider& slider)
 {
     if (!knobImage.isValid())
     {
         // Fallback to default drawing if image not loaded
         LookAndFeel_V4::drawRotarySlider (g, x, y, width, height, sliderPosProportional,
-                                         0.0f, juce::MathConstants<float>::twoPi,
-                                         *static_cast<juce::Slider*>(nullptr));
+                                         rotaryStartAngle, rotaryEndAngle, slider);
         return;
     }
 
