@@ -9625,3 +9625,4 @@ static const unsigned char knob_png_data[] = {
 };
 
 const char* BinaryData::knob_png = (const char*) knob_png_data;
+const int BinaryData::knob_pngSize = sizeof(knob_png_data);

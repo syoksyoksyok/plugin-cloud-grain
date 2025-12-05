@@ -6,5 +6,5 @@
 namespace BinaryData
 {
     extern const char*  knob_png;
-    const int           knob_pngSize = 153859;
+    extern const int    knob_pngSize;
 }
