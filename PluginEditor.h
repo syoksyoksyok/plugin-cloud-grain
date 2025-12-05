@@ -32,10 +32,12 @@ private:
 
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::ToggleButton randomButton { "Randomize" };
-    juce::Label modeLabel;  // Displays current mode (Granular/WSOLA)
+    juce::Label modeLabel;  // Displays current mode (Granular/WSOLA/Looping/Spectral)
+    juce::ComboBox modeSelector;  // Dropdown for mode selection
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
     std::unique_ptr<SliderAttachment> positionAttachment;
     std::unique_ptr<SliderAttachment> sizeAttachment;
@@ -47,6 +49,7 @@ private:
     std::unique_ptr<SliderAttachment> reverbAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
+    std::unique_ptr<ComboBoxAttachment> modeAttachment;
 
     void setupKnob (Knob& k, const juce::String& name);
 
