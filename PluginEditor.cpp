@@ -180,6 +180,9 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
     k.slider.setPopupDisplayEnabled (true, false, this);
 
+    // Apply custom LookAndFeel
+    k.slider.setLookAndFeel (&customKnobLookAndFeel);
+
     k.label.setText (name, juce::dontSendNotification);
     k.label.attachToComponent (&k.slider, false);
     k.label.setJustificationType (juce::Justification::centred);

@@ -21,6 +21,71 @@ public:
 private:
     CloudLikeGranularProcessor& processor;
 
+    // Custom LookAndFeel for circular knobs with dot indicator
+    class CustomKnobLookAndFeel : public juce::LookAndFeel_V4
+    {
+    public:
+        void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                              float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
+                              juce::Slider& slider) override
+        {
+            auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (10);
+            auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto lineW = juce::jmin (8.0f, radius * 0.5f);
+            auto arcRadius = radius - lineW * 0.5f;
+
+            // Draw outer circle
+            g.setColour (juce::Colour::fromRGB (60, 60, 80));
+            g.fillEllipse (bounds);
+
+            // Draw inner circle (knob body)
+            auto innerBounds = bounds.reduced (lineW * 0.5f);
+            g.setColour (juce::Colour::fromRGB (40, 40, 60));
+            g.fillEllipse (innerBounds);
+
+            // Draw arc track
+            juce::Path backgroundArc;
+            backgroundArc.addCentredArc (bounds.getCentreX(),
+                                        bounds.getCentreY(),
+                                        arcRadius,
+                                        arcRadius,
+                                        0.0f,
+                                        rotaryStartAngle,
+                                        rotaryEndAngle,
+                                        true);
+
+            g.setColour (juce::Colour::fromRGB (80, 80, 100));
+            g.strokePath (backgroundArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            // Draw value arc
+            if (toAngle > rotaryStartAngle)
+            {
+                juce::Path valueArc;
+                valueArc.addCentredArc (bounds.getCentreX(),
+                                       bounds.getCentreY(),
+                                       arcRadius,
+                                       arcRadius,
+                                       0.0f,
+                                       rotaryStartAngle,
+                                       toAngle,
+                                       true);
+
+                g.setColour (juce::Colour::fromRGB (100, 200, 255));
+                g.strokePath (valueArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+
+            // Draw indicator dot
+            juce::Point<float> dotPoint (bounds.getCentreX() + arcRadius * std::cos (toAngle - juce::MathConstants<float>::halfPi),
+                                        bounds.getCentreY() + arcRadius * std::sin (toAngle - juce::MathConstants<float>::halfPi));
+
+            g.setColour (juce::Colours::white);
+            g.fillEllipse (juce::Rectangle<float> (lineW, lineW).withCentre (dotPoint));
+        }
+    };
+
+    CustomKnobLookAndFeel customKnobLookAndFeel;
+
     struct Knob
     {
         juce::Slider slider;
