@@ -48,15 +48,16 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     randomButton.setColour (juce::ComboBox::outlineColourId, juce::Colour::fromRGB (26, 26, 26));
     randomButton.setLookAndFeel (ePaperLookAndFeel.get());
 
+    // Trigger randomize parameter when button is clicked (MIDI/Ableton mappable)
     randomButton.onClick = [this]
     {
         if (auto* param = processor.apvts.getParameter ("randomize"))
         {
-            randomButton.setToggleState (true, juce::dontSendNotification);
             param->beginChangeGesture();
             param->setValueNotifyingHost (1.0f);
             param->endChangeGesture();
-            triggerAsyncUpdate();
+            // Reset parameter back to 0 after a short delay
+            param->setValueNotifyingHost (0.0f);
         }
     };
 
@@ -95,11 +96,6 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     randomButton.setLookAndFeel (nullptr);
 
     // unique_ptr will automatically clean up ePaperLookAndFeel
-}
-
-void CloudLikeGranularEditor::handleAsyncUpdate()
-{
-    randomButton.setToggleState (false, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::timerCallback()
@@ -264,14 +260,6 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         auto freezeBounds = freezeButton.getBounds().toFloat().reduced (1.0f);
         g.setColour (juce::Colour::fromRGB (26, 26, 26));
         g.drawRoundedRectangle (freezeBounds, 0.0f, 2.0f);
-    }
-
-    // Draw subtle border around Randomize button when pressed (E-Paper style)
-    if (randomButton.getToggleState())
-    {
-        auto randomBounds = randomButton.getBounds().toFloat().reduced (1.0f);
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
-        g.drawRoundedRectangle (randomBounds, 0.0f, 2.0f);
     }
 }
 

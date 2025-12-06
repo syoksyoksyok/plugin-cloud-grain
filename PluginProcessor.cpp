@@ -1329,26 +1329,29 @@ void CloudLikeGranularProcessor::parameterChanged (const juce::String& parameter
 
 void CloudLikeGranularProcessor::randomizeParameters()
 {
-    auto set = [this] (const juce::String& id, float min, float max)
+    // Helper to set parameter with normalized 0-1 value
+    auto setNormalized = [this] (const juce::String& id)
     {
         if (auto* p = apvts.getParameter (id))
         {
-            float value = uniform(rng) * (max - min) + min;
-            p->setValueNotifyingHost (value);
+            // Generate random normalized value (0.0 to 1.0)
+            float normalizedValue = uniform(rng);
+            p->setValueNotifyingHost (normalizedValue);
         }
     };
 
-    set ("position",  0.0f, 1.0f);
-    set ("size",      0.01f, 0.5f);
-    set ("pitch",    -24.0f, 24.0f);
-    set ("density",   0.0f, 1.0f);
-    set ("texture",   0.0f, 1.0f);
-    set ("feedback",  0.0f, 0.95f);
-    set ("reverb",    0.0f, 1.0f);
+    // Randomize all parameters (except freeze and mode)
+    setNormalized ("position");
+    setNormalized ("size");
+    setNormalized ("pitch");      // Now correctly randomizes full -24 to +24 range
+    setNormalized ("density");
+    setNormalized ("texture");
+    setNormalized ("spread");
+    setNormalized ("feedback");
+    setNormalized ("reverb");
+    setNormalized ("mix");
 
-    // Randomly set freeze parameter
-    bool freezeState = uniform(rng) > 0.5f;
-    apvts.getParameter("freeze")->setValueNotifyingHost (freezeState ? 1.0f : 0.0f);
+    // Note: Freeze and Mode are excluded from randomization
 }
 
 juce::AudioProcessorEditor* CloudLikeGranularProcessor::createEditor()
