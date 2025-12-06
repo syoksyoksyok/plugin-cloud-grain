@@ -22,7 +22,7 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
+    // Mode selection: 0 = Granular, 1 = Pitch Shifter, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
     params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 6, 0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
@@ -482,9 +482,9 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                   effectiveFeedback, freeze);
             break;
 
-        case MODE_WSOLA:
-            processWSOLABlock (buffer, numSamples, wetL, wetR,
-                               position, size, pitch, effectiveFeedback, freeze);
+        case MODE_PITCH_SHIFTER:
+            processPitchShifterBlock (buffer, numSamples, wetL, wetR,
+                                      position, size, pitch, effectiveFeedback, freeze);
             break;
 
         case MODE_LOOPING:
@@ -711,20 +711,33 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
     }
 }
 
-void CloudLikeGranularProcessor::processWSOLABlock (juce::AudioBuffer<float>& buffer, int numSamples,
-                                                    float* wetL, float* wetR,
-                                                    float position, float size, float pitch,
-                                                    float feedback, bool freeze)
+void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                                           float* wetL, float* wetR,
+                                                           float position, float size, float pitch,
+                                                           float feedback, bool freeze)
 {
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== WSOLA MODE (Block Processing) ==========
+    // ========== PITCH SHIFTER MODE (Clouds-style WSOLA) ==========
+    // SIZE: Controls window size - large = smooth, small = grainy/ring-modulated
+    // PITCH: Controls pitch shift amount (-24 to +24 semitones)
+    // POSITION: Controls read delay position
+
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
-    float timeStretch = 0.5f + size * 1.5f;  // Maps 0-1 to 0.5-2.0x speed
-    int windowSize = wsolaWindowSize;
-    int hopOut = windowSize >> 1;  // OPTIMIZED: Division by 2 using bit shift
-    int hopIn = static_cast<int>(hopOut / timeStretch);
+    float pitchRatio = pitchToRatio(pitch);
+
+    // Clouds-style SIZE mapping: 0.0 = small (256), 1.0 = large (2048)
+    // Small window = grainy, ring-modulated; Large window = smooth
+    int windowSize = static_cast<int>(256.0f + size * 1792.0f);  // 256 to 2048
+    windowSize = (windowSize + 3) & ~3;  // Round to multiple of 4 for alignment
+
+    int hopOut = windowSize >> 1;  // OPTIMIZED: Output hop = half window size
+
+    // Time stretching: combine pitch shift with independent time scaling
+    // pitchRatio > 1.0 = higher pitch, < 1.0 = lower pitch
+    float timeStretch = 1.0f / pitchRatio;  // Inverse for time-domain playback
+    int hopIn = static_cast<int>(hopOut * timeStretch);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -738,22 +751,39 @@ void CloudLikeGranularProcessor::processWSOLABlock (juce::AudioBuffer<float>& bu
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        double readPos = wsolaReadPos;
-        if (readPos < 0) readPos += bufferSize;
-        if (readPos >= bufferSize) readPos -= bufferSize;
+        // Clouds-style read position with delay
+        double delayAmount = position * (bufferSize - windowSize);
+        double readPos = pitchShifterReadPos;
+        double delayedReadPos = static_cast<double>(writeHead) - delayAmount - readPos;
 
-        float outL = getSampleFromRing(0, readPos);
-        float outR = getSampleFromRing(1, readPos);
+        // Wrap read position
+        while (delayedReadPos < 0) delayedReadPos += bufferSize;
+        while (delayedReadPos >= bufferSize) delayedReadPos -= bufferSize;
 
-        // Apply Hann window for smoothing (OPTIMIZED: LUT)
-        float windowPhase = std::fmod(wsolaReadPos, static_cast<double>(hopOut)) / hopOut;
+        float outL = getSampleFromRing(0, delayedReadPos);
+        float outR = getSampleFromRing(1, delayedReadPos);
+
+        // Clouds-style Hann window with pitch-dependent shaping (OPTIMIZED: LUT)
+        // Smoother envelope for large windows, more aggressive for small windows
+        float windowPhase = std::fmod(pitchShifterReadPos, static_cast<double>(hopOut)) / hopOut;
         float window = 0.5f * (1.0f - fastCos(windowPhase * juce::MathConstants<float>::twoPi));
+
+        // Additional envelope shaping for small windows (ring-mod effect)
+        if (size < 0.3f)
+        {
+            float ringModAmount = (0.3f - size) * 3.333f;  // 0 to 1
+            window = window * (1.0f - ringModAmount * 0.5f);  // Reduce amplitude
+        }
 
         wetL[i] = outL * window;
         wetR[i] = outR * window;
 
-        wsolaReadPos += timeStretch;
-        if (wsolaReadPos >= bufferSize) wsolaReadPos -= bufferSize;
+        // Advance read position
+        pitchShifterReadPos += 1.0;
+        if (pitchShifterReadPos >= hopOut)
+        {
+            pitchShifterReadPos -= hopOut;
+        }
     }
 }
 

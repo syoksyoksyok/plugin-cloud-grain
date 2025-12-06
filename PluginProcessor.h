@@ -76,12 +76,12 @@ private:
     enum ProcessingMode
     {
         MODE_GRANULAR = 0,
-        MODE_WSOLA = 1,
+        MODE_PITCH_SHIFTER = 1,  // Clouds: WSOLA-based pitch shifter/time stretcher
         MODE_LOOPING = 2,
         MODE_SPECTRAL = 3,
-        MODE_OLIVERB = 4,      // Parasites: Creative reverb mode
-        MODE_RESONESTOR = 5,   // Parasites: Polyphonic resonator (Karplus-Strong)
-        MODE_BEAT_REPEAT = 6   // Parasites: Beat repeat/stutter effect
+        MODE_OLIVERB = 4,        // Parasites: Creative reverb mode
+        MODE_RESONESTOR = 5,     // Parasites: Polyphonic resonator (Karplus-Strong)
+        MODE_BEAT_REPEAT = 6     // Parasites: Beat repeat/stutter effect
     };
 
     // Correlator for pitch detection and grain alignment (Clouds-style)
@@ -283,10 +283,10 @@ private:
     int detectedPeriod = 0;
     int correlatorUpdateCounter = 0;
 
-    // WSOLA state
-    double wsolaReadPos = 0.0;
-    int wsolaWindowSize = 2048;
-    int wsolaSearchWindow = 512;
+    // Pitch Shifter state (WSOLA-based)
+    double pitchShifterReadPos = 0.0;
+    int pitchShifterWindowSize = 2048;
+    int pitchShifterSearchWindow = 512;
 
     // Looping mode state
     double loopReadPos = 0.0;
@@ -362,7 +362,7 @@ private:
     float fastInverseSqrt (float number) const;
     float computeOverlap (float density) const;
 
-    // WSOLA helper: find best matching segment
+    // Pitch Shifter (WSOLA) helper: find best matching segment
     int findBestMatch (const float* reference, const float* searchBuffer,
                        int searchLength, int windowSize);
 
@@ -375,10 +375,10 @@ private:
                                float position, float size, float pitch, float density,
                                float texture, float spread, float feedback, bool freeze);
 
-    void processWSOLABlock (juce::AudioBuffer<float>& buffer, int numSamples,
-                            float* wetL, float* wetR,
-                            float position, float size, float pitch,
-                            float feedback, bool freeze);
+    void processPitchShifterBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                   float* wetL, float* wetR,
+                                   float position, float size, float pitch,
+                                   float feedback, bool freeze);
 
     void processLoopingBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                               float* wetL, float* wetR,
