@@ -28,8 +28,8 @@ public:
         auto rw = radius * 2.0f;
         auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-        // Draw outer circle (outline)
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        // Draw outer circle (outline) - lighter color to match text
+        g.setColour (juce::Colour::fromRGB (102, 102, 102));
         g.drawEllipse (rx, ry, rw, rw, 2.0f);
 
         // Draw tick marks
@@ -48,11 +48,11 @@ public:
             g.drawLine (tickX1, tickY1, tickX2, tickY2, 2.0f);
         }
 
-        // Draw center dot
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        // Draw center dot - lighter color to match text
+        g.setColour (juce::Colour::fromRGB (102, 102, 102));
         g.fillEllipse (centreX - 3.0f, centreY - 3.0f, 6.0f, 6.0f);
 
-        // Draw indicator line
+        // Draw indicator line - lighter color to match text
         auto pointerLength = radius - 8.0f;
         auto pointerThickness = 3.0f;
         juce::Path p;

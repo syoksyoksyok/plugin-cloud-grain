@@ -300,18 +300,18 @@ void CloudLikeGranularEditor::resized()
         k.slider.setBounds (r.reduced (25));
     };
 
-    // Row 1: Position, Size, Pitch, Density, Texture
+    // Row 1: Position, Density, Size, Texture, Pitch
     placeKnob (positionKnob, row1.removeFromLeft (colWidth));
-    placeKnob (sizeKnob,     row1.removeFromLeft (colWidth));
-    placeKnob (pitchKnob,    row1.removeFromLeft (colWidth));
     placeKnob (densityKnob,  row1.removeFromLeft (colWidth));
+    placeKnob (sizeKnob,     row1.removeFromLeft (colWidth));
     placeKnob (textureKnob,  row1.removeFromLeft (colWidth));
+    placeKnob (pitchKnob,    row1.removeFromLeft (colWidth));
 
-    // Row 2: Spread, Feedback, Mix, Reverb, Mode
+    // Row 2: Spread, Feedback, Reverb, Mix, Mode
     placeKnob (spreadKnob,   row2.removeFromLeft (colWidth));
     placeKnob (feedbackKnob, row2.removeFromLeft (colWidth));
-    placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
     placeKnob (reverbKnob,   row2.removeFromLeft (colWidth));
+    placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
     placeKnob (modeKnob,     row2.removeFromLeft (colWidth));
 
     // E-Paper UI: Buttons at bottom
