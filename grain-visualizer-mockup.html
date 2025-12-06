@@ -32,9 +32,9 @@
             position: relative;
         }
 
-        /* Grain Visualizer Area (Top 2/3) */
+        /* Grain Visualizer Area (Top Half) */
         .visualizer-container {
-            flex: 2;
+            flex: 1;
             background: #FAFAFA;
             border-bottom: 2px solid #E0E0E0;
             position: relative;
@@ -47,18 +47,7 @@
             display: block;
         }
 
-        .visualizer-info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 11px;
-            color: #666;
-            background: rgba(250, 250, 250, 0.8);
-            padding: 8px;
-            border: 1px solid #E0E0E0;
-        }
-
-        /* Controls Area (Bottom 1/3) */
+        /* Controls Area (Bottom Half) */
         .controls-container {
             flex: 1;
             display: flex;
@@ -153,6 +142,17 @@
             text-align: center;
         }
 
+        .info-display {
+            padding: 8px 20px;
+            border-top: 1px solid #E0E0E0;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 11px;
+            color: #666;
+            background: #F5F5F5;
+        }
+
         .footer {
             display: flex;
             justify-content: space-between;
@@ -187,16 +187,12 @@
 </head>
 <body>
     <div class="plugin-container">
-        <!-- Grain Visualizer (Top 2/3) -->
+        <!-- Grain Visualizer (Top Half) -->
         <div class="visualizer-container">
             <canvas id="grainCanvas"></canvas>
-            <div class="visualizer-info">
-                <div>Active Grains: <span id="grainCount">0</span></div>
-                <div>Density: <span id="densityValue">50%</span></div>
-            </div>
         </div>
 
-        <!-- Controls (Bottom 1/3) -->
+        <!-- Controls (Bottom Half) -->
         <div class="controls-container">
             <div class="header">
                 <div class="mode-label">MODE: Granular</div>
@@ -312,6 +308,11 @@
                 </div>
             </div>
 
+            <div class="info-display">
+                <div>Active Grains: <span id="grainCount">0</span></div>
+                <div>Density: <span id="densityValue">70%</span></div>
+            </div>
+
             <div class="footer">
                 <button class="button">Freeze</button>
                 <button class="button">Randomize</button>
@@ -372,9 +373,10 @@
                 const baseRadius = 15;
                 const radius = baseRadius * env;
 
-                // E-Paper style: Ink blue with envelope-based alpha
-                const alpha = env * 0.7 + 0.1;  // 0.1 to 0.8
-                const color = `rgba(52, 73, 94, ${alpha})`;
+                // E-Paper style: Lighter grayscale with envelope-based alpha
+                const alpha = env * 0.6 + 0.15;  // 0.15 to 0.75
+                const grayValue = 120 + env * 40;  // 120 to 160 (lighter gray)
+                const color = `rgba(${grayValue}, ${grayValue}, ${grayValue}, ${alpha})`;
 
                 // Draw grain particle
                 ctx.fillStyle = color;
@@ -383,7 +385,7 @@
                 ctx.fill();
 
                 // Draw subtle outline for depth
-                ctx.strokeStyle = `rgba(26, 26, 26, ${alpha * 0.5})`;
+                ctx.strokeStyle = `rgba(80, 80, 80, ${alpha * 0.4})`;
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
