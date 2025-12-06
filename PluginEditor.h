@@ -125,7 +125,7 @@ public:
 private:
     CloudLikeGranularProcessor& processor;
 
-    EPaperLookAndFeel ePaperLookAndFeel;  // Custom LookAndFeel for e-paper aesthetic
+    std::unique_ptr<EPaperLookAndFeel> ePaperLookAndFeel;  // Custom LookAndFeel for e-paper aesthetic (managed lifetime)
 
     struct Knob
     {

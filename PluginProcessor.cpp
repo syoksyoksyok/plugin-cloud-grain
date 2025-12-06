@@ -2,6 +2,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+// Include SSE intrinsics for fast inverse square root
+#if defined(__SSE__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
+    #include <xmmintrin.h>
+#endif
+
 //==============================================================================
 CloudLikeGranularProcessor::CloudLikeGranularProcessor()
     : AudioProcessor (BusesProperties()
@@ -133,8 +138,8 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     // Initialize correlators
     correlatorL.setSampleRate(sampleRate);
     correlatorR.setSampleRate(sampleRate);
-    detectedPeriod = 0;
-    correlatorUpdateCounter = 0;
+    detectedPeriod.store(0);
+    correlatorUpdateCounter.store(0);
 
     // Initialize Spectral mode state
     spectralInputPos = 0;
@@ -259,12 +264,29 @@ float CloudLikeGranularProcessor::getGrainEnvelope (double t, double duration, f
     return env;
 }
 
-// Carmack's fast inverse square root (for gain normalization)
+// Fast inverse square root for gain normalization
+// Uses hardware SIMD instructions when available, falls back to standard implementation
 float CloudLikeGranularProcessor::fastInverseSqrt (float number) const
 {
-    // Modern approximation with better accuracy
     if (number <= 0.0f) return 1.0f;
-    return 1.0f / std::sqrt (number);
+
+    #if defined(__SSE__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
+        // Use SSE instruction for fast approximation
+        __m128 x = _mm_set_ss(number);
+        __m128 rsqrt = _mm_rsqrt_ss(x);
+
+        // One Newton-Raphson iteration for better accuracy
+        // x' = x * (1.5 - 0.5 * n * x * x)
+        __m128 half = _mm_set_ss(0.5f);
+        __m128 three_halfs = _mm_set_ss(1.5f);
+        __m128 rsqrt_refined = _mm_mul_ss(rsqrt,
+            _mm_sub_ss(three_halfs, _mm_mul_ss(_mm_mul_ss(x, half), _mm_mul_ss(rsqrt, rsqrt))));
+
+        return _mm_cvtss_f32(rsqrt_refined);
+    #else
+        // Fallback to standard library
+        return 1.0f / std::sqrt(number);
+    #endif
 }
 
 // WSOLA: Find best matching segment using correlation
@@ -321,6 +343,32 @@ float CloudLikeGranularProcessor::computeOverlap (float density) const
     return juce::jlimit (0.0f, 1.0f, overlap);
 }
 
+// Helper function to initialize a grain (reduces code duplication)
+void CloudLikeGranularProcessor::initializeGrain (Grain& g, int channel, double baseStart,
+                                                  double durationSamps, double pitchRatio,
+                                                  float positionJitter, float spreadWidth)
+{
+    g.active = true;
+    g.channel = channel;
+    g.startSample = baseStart + (uniform(rng) - 0.5f) * positionJitter * durationSamps;
+    g.position = 0.0;
+    g.durationSamples = durationSamps;
+    g.phaseInc = pitchRatio;
+    g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
+
+    // Clouds-style pitch shifting initialization
+    g.phase = 0.0;
+    g.phaseIncrement = (1.0 - pitchRatio) / durationSamps;
+
+    // Clouds-style pre-delay (0 to ~10ms random)
+    g.preDelay = static_cast<int>(uniform(rng) * currentSampleRate * 0.01f);
+
+    // Clouds-style per-grain stereo gain (OPTIMIZED: LUT)
+    float panAngle = (g.pan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+    g.gainL = fastCos(panAngle);
+    g.gainR = fastSin(panAngle);
+}
+
 void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
                                                float positionParam, float sizeParam,
                                                float pitchSemis, float textureParam,
@@ -358,60 +406,29 @@ void CloudLikeGranularProcessor::launchGrains (int numToLaunch, int channel,
 
     for (int n = 0; n < numToLaunch; ++n)
     {
+        Grain* grainPtr = nullptr;
+
         // Use free list for efficient grain allocation
-        if (freeGrainIndices.empty())
+        if (!freeGrainIndices.empty())
+        {
+            int idx = freeGrainIndices.back();
+            freeGrainIndices.pop_back();
+            grainPtr = &grains[idx];
+        }
+        else
         {
             // Fallback: find first inactive grain
             auto it = std::find_if (grains.begin(), grains.end(),
                                     [] (const Grain& g) { return !g.active; });
             if (it == grains.end()) break;
-
-            Grain& g = *it;
-            g.active = true;
-            g.channel = channel;
-            g.startSample = baseStart + (uniform(rng) - 0.5f) * positionJitter * durationSamps;
-            g.position = 0.0;
-            g.durationSamples = durationSamps;
-            g.phaseInc = pitchRatio;
-            g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
-
-            // Clouds-style pitch shifting initialization
-            g.phase = 0.0;
-            g.phaseIncrement = (1.0 - pitchRatio) / durationSamps;
-
-            // Clouds-style pre-delay (0 to ~10ms random)
-            g.preDelay = static_cast<int>(uniform(rng) * currentSampleRate * 0.01f);
-
-            // Clouds-style per-grain stereo gain (OPTIMIZED: LUT)
-            float panAngle = (g.pan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
-            g.gainL = fastCos(panAngle);
-            g.gainR = fastSin(panAngle);
+            grainPtr = &(*it);
         }
-        else
+
+        // Initialize grain using helper function (eliminates code duplication)
+        if (grainPtr != nullptr)
         {
-            int idx = freeGrainIndices.back();
-            freeGrainIndices.pop_back();
-
-            Grain& g = grains[idx];
-            g.active = true;
-            g.channel = channel;
-            g.startSample = baseStart + (uniform(rng) - 0.5f) * positionJitter * durationSamps;
-            g.position = 0.0;
-            g.durationSamples = durationSamps;
-            g.phaseInc = pitchRatio;
-            g.pan = (uniform(rng) * 2.0f - 1.0f) * spreadWidth;
-
-            // Clouds-style pitch shifting initialization
-            g.phase = 0.0;
-            g.phaseIncrement = (1.0 - pitchRatio) / durationSamps;
-
-            // Clouds-style pre-delay (0 to ~10ms random)
-            g.preDelay = static_cast<int>(uniform(rng) * currentSampleRate * 0.01f);
-
-            // Clouds-style per-grain stereo gain (OPTIMIZED: LUT)
-            float panAngle = (g.pan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
-            g.gainL = fastCos(panAngle);
-            g.gainR = fastSin(panAngle);
+            initializeGrain(*grainPtr, channel, baseStart, durationSamps,
+                          pitchRatio, positionJitter, spreadWidth);
         }
     }
 }
@@ -432,10 +449,13 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
 
     // Run correlation analysis periodically (every 256 samples) for pitch detection
-    correlatorUpdateCounter += numSamples;
-    if (correlatorUpdateCounter >= 256)
+    int currentCounter = correlatorUpdateCounter.load();
+    currentCounter += numSamples;
+    correlatorUpdateCounter.store(currentCounter);
+
+    if (currentCounter >= 256)
     {
-        correlatorUpdateCounter = 0;
+        correlatorUpdateCounter.store(0);
 
         // Analyze recent buffer content for period detection
         int analysisLength = juce::jmin(2048, bufferSize / 4);
@@ -445,7 +465,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             int minPeriod = static_cast<int>(currentSampleRate / 1000.0);  // 1000 Hz max
             int maxPeriod = static_cast<int>(currentSampleRate / 50.0);    // 50 Hz min
 
-            detectedPeriod = correlatorL.detectPeriod(analysisData, analysisLength, minPeriod, maxPeriod);
+            int period = correlatorL.detectPeriod(analysisData, analysisLength, minPeriod, maxPeriod);
+            detectedPeriod.store(period);
         }
     }
 
@@ -616,12 +637,13 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
         if (triggerGrain)
         {
             // Pass detected period for grain alignment optimization
-            launchGrains (1, 0, position, size, pitch, texture, spread, detectedPeriod);
-            launchGrains (1, 1, position, size, pitch, texture, spread, detectedPeriod);
+            int period = detectedPeriod.load();
+            launchGrains (1, 0, position, size, pitch, texture, spread, period);
+            launchGrains (1, 1, position, size, pitch, texture, spread, period);
         }
 
         float grainOutL = 0.0f, grainOutR = 0.0f;
-        numActiveGrains = 0;
+        int activeCount = 0;
 
         // OPTIMIZATION: Scan only active grains
         for (int idx = 0; idx < maxGrains; ++idx)
@@ -636,13 +658,13 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
                 continue;  // Skip rendering until pre-delay expires
             }
 
-            numActiveGrains++;
+            activeCount++;
 
             if (g.position >= g.durationSamples)
             {
                 g.active = false;
                 freeGrainIndices.push_back (idx);
-                numActiveGrains--;
+                activeCount--;
                 continue;
             }
 
@@ -686,11 +708,14 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
             g.position += g.phaseInc;
         }
 
+        // Store active grain count for potential UI display
+        numActiveGrains.store(activeCount);
+
         // Clouds-style gain normalization
         float gainNormalization = 1.0f;
-        if (numActiveGrains > 1)
+        if (activeCount > 1)
         {
-            gainNormalization = fastInverseSqrt (static_cast<float> (numActiveGrains - 1));
+            gainNormalization = fastInverseSqrt (static_cast<float> (activeCount - 1));
         }
 
         float windowGain = 1.0f + overlap;
@@ -907,12 +932,9 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         {
             spectralInputPos = 0;
 
-            // Zero pad the second half for complex FFT (OPTIMIZED: Use bit shift)
-            for (int n = fftSize; n < (fftSize << 1); ++n)  // fftSize * 2
-            {
-                fftDataL[n] = 0.0f;
-                fftDataR[n] = 0.0f;
-            }
+            // Zero pad the second half for complex FFT (OPTIMIZED: Use std::fill)
+            std::fill(fftDataL.begin() + fftSize, fftDataL.end(), 0.0f);
+            std::fill(fftDataR.begin() + fftSize, fftDataR.end(), 0.0f);
 
             // Perform forward FFT
             forwardFFT.performRealOnlyForwardTransform(fftDataL.data());
@@ -1192,10 +1214,10 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
         {
             // Wrap repeatPos to valid range (handles both positive and negative speeds)
-            while (beatRepeat.repeatPos < 0.0f)
+            // Use fmod for safe wrapping to avoid infinite loops
+            beatRepeat.repeatPos = std::fmod(beatRepeat.repeatPos, static_cast<float>(beatRepeat.captureLength));
+            if (beatRepeat.repeatPos < 0.0f)
                 beatRepeat.repeatPos += beatRepeat.captureLength;
-            while (beatRepeat.repeatPos >= beatRepeat.captureLength)
-                beatRepeat.repeatPos -= beatRepeat.captureLength;
 
             // Use linear interpolation for smooth playback at any speed
             float readPosFloat = beatRepeat.repeatPos;

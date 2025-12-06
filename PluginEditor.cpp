@@ -3,7 +3,9 @@
 
 //==============================================================================
 CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p)
+    , processor (p)
+    , ePaperLookAndFeel (std::make_unique<EPaperLookAndFeel>())
 {
     setSize (600, 400);  // E-Paper UI: 600x400
     startTimerHz (30);  // Update button states at 30Hz
@@ -36,7 +38,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     freezeButton.setColour (juce::ToggleButton::textColourId, juce::Colour::fromRGB (26, 26, 26));
     freezeButton.setColour (juce::ToggleButton::tickColourId, juce::Colour::fromRGB (26, 26, 26));
     freezeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
-    freezeButton.setLookAndFeel (&ePaperLookAndFeel);
+    freezeButton.setLookAndFeel (ePaperLookAndFeel.get());
 
     // Style Randomize button (E-Paper: matte black text, off-white background)
     randomButton.setColour (juce::TextButton::buttonColourId, juce::Colour::fromRGB (250, 250, 250));
@@ -44,7 +46,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     randomButton.setColour (juce::TextButton::textColourOffId, juce::Colour::fromRGB (26, 26, 26));
     randomButton.setColour (juce::TextButton::textColourOnId, juce::Colour::fromRGB (26, 26, 26));
     randomButton.setColour (juce::ComboBox::outlineColourId, juce::Colour::fromRGB (26, 26, 26));
-    randomButton.setLookAndFeel (&ePaperLookAndFeel);
+    randomButton.setLookAndFeel (ePaperLookAndFeel.get());
 
     randomButton.onClick = [this]
     {
@@ -77,7 +79,8 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
 {
     stopTimer();
 
-    // Clear LookAndFeel references before destruction
+    // Clear LookAndFeel references before unique_ptr destruction
+    // This ensures proper cleanup order to prevent dangling pointers
     modeKnob.slider.setLookAndFeel (nullptr);
     positionKnob.slider.setLookAndFeel (nullptr);
     sizeKnob.slider.setLookAndFeel (nullptr);
@@ -90,6 +93,8 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     mixKnob.slider.setLookAndFeel (nullptr);
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
+
+    // unique_ptr will automatically clean up ePaperLookAndFeel
 }
 
 void CloudLikeGranularEditor::handleAsyncUpdate()
@@ -222,7 +227,7 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     k.slider.setPopupDisplayEnabled (true, false, this);
 
     // Apply E-Paper LookAndFeel
-    k.slider.setLookAndFeel (&ePaperLookAndFeel);
+    k.slider.setLookAndFeel (ePaperLookAndFeel.get());
 
     // E-Paper styling for text box and label
     k.slider.setColour (juce::Slider::textBoxTextColourId, juce::Colour::fromRGB (102, 102, 102));

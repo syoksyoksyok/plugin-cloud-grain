@@ -280,8 +280,8 @@ private:
 
     // Correlator for pitch detection and grain optimization
     Correlator correlatorL, correlatorR;
-    int detectedPeriod = 0;
-    int correlatorUpdateCounter = 0;
+    std::atomic<int> detectedPeriod { 0 };
+    std::atomic<int> correlatorUpdateCounter { 0 };
 
     // Pitch Shifter state (WSOLA-based)
     double pitchShifterReadPos = 0.0;
@@ -349,13 +349,16 @@ private:
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
-    int numActiveGrains = 0;
+    std::atomic<int> numActiveGrains { 0 };
     float smoothedGain = 1.0f;
 
     void launchGrains (int numToLaunch, int channel,
                        float positionParam, float sizeParam,
                        float pitchSemis, float textureParam,
                        float stereoSpread, int periodHint = 0);
+
+    void initializeGrain (Grain& g, int channel, double baseStart, double durationSamps,
+                         double pitchRatio, float positionJitter, float spreadWidth);
 
     float getSampleFromRing (int channel, double index) const;
     float getGrainEnvelope (double t, double duration, float textureParam) const;
