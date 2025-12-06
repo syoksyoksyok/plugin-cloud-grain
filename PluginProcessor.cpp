@@ -734,7 +734,11 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
         float envelope = 0.5f * (1.0f - std::cos(juce::MathConstants<float>::twoPi * normalizedPhase));
 
         auto& vg = visualizationGrains[visCount];
-        vg.position = static_cast<float>(std::fmod(g.startSample / bufferSize, 1.0));
+        // Fix: Cast to double to avoid integer division
+        if (bufferSize > 0)
+            vg.position = static_cast<float>(std::fmod(g.startSample / static_cast<double>(bufferSize), 1.0));
+        else
+            vg.position = 0.0f;
         vg.pitch = pitch;  // Use current pitch parameter
         vg.envelope = envelope;
         vg.active = true;
