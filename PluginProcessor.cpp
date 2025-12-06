@@ -39,6 +39,14 @@ CloudLikeGranularProcessor::createParameterLayout()
     params.push_back (std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 0.95f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("mix",      "Mix",      0.0f, 1.0f, 1.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("reverb",   "Reverb",   0.0f, 1.0f, 0.3f));
+
+    // TRIG parameters
+    // trigMode: false = Manual (MIDI), true = Auto (Tempo Sync)
+    params.push_back (std::make_unique<juce::AudioParameterBool>("trigMode",  "Trig Mode", false));
+    // trigRate: Center (0) = 1/4 note, Left (-) = divisions, Right (+) = multiplications
+    // Range: -4.0 (1/16) to +4.0 (4 bars), with triplet support
+    params.push_back (std::make_unique<juce::AudioParameterFloat>("trigRate", "Trig Rate", -4.0f, 4.0f, 0.0f));
+
     params.push_back (std::make_unique<juce::AudioParameterBool>("freeze",   "Freeze",   false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("randomize","Randomize",false));
 
@@ -437,13 +445,40 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                                juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
-    midi.clear();
 
     auto numSamples = buffer.getNumSamples();
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
+
+    // Process MIDI for TRIG input (Manual mode)
+    bool trigMode = apvts.getRawParameterValue ("trigMode")->load() > 0.5f;  // false = Manual/MIDI, true = Auto
+
+    if (!trigMode)  // Manual/MIDI mode
+    {
+        bool currentMidiNoteState = false;
+
+        for (const auto metadata : midi)
+        {
+            auto message = metadata.getMessage();
+
+            // Trigger on both note on and note off
+            if (message.isNoteOn() || message.isNoteOff())
+            {
+                currentMidiNoteState = message.isNoteOn();
+
+                // Edge detection: trigger on state change
+                if (currentMidiNoteState != lastMidiNoteState)
+                {
+                    triggerReceived.store(true);
+                    lastMidiNoteState = currentMidiNoteState;
+                }
+            }
+        }
+    }
+
+    midi.clear();  // Clear MIDI output (we don't produce MIDI)
 
     // Get processing mode
     int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
@@ -653,25 +688,38 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        // Clouds-style grain triggering
-        bool triggerGrain = false;
-
-        if (useDeterministic)
+        // TRIG input: Force grain generation (Clouds TRIG behavior)
+        // When TRIG is received, generate 1 grain based on POSITION/SIZE, bypassing density
+        bool manualTrigger = false;
+        if (i == 0 && triggerReceived.load())  // Check trigger at start of block
         {
-            // Deterministic mode: evenly spaced grains
-            grainRatePhasor += grainRate / (float) currentSampleRate * 100.0f;
-            if (grainRatePhasor >= 1.0f)
-            {
-                grainRatePhasor -= 1.0f;
-                triggerGrain = true;
-            }
+            manualTrigger = true;
+            triggerReceived.store(false);  // Clear trigger flag
         }
-        else
+
+        // Clouds-style grain triggering (automatic, based on density)
+        bool triggerGrain = manualTrigger;  // Manual TRIG always triggers
+
+        // Only use density-based triggering if no manual trigger
+        if (!manualTrigger)
         {
-            // Probabilistic mode: random triggering
-            float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
-            float prob = grainsPerSecond / (float) currentSampleRate;
-            triggerGrain = (uniform (rng) < prob);
+            if (useDeterministic)
+            {
+                // Deterministic mode: evenly spaced grains
+                grainRatePhasor += grainRate / (float) currentSampleRate * 100.0f;
+                if (grainRatePhasor >= 1.0f)
+                {
+                    grainRatePhasor -= 1.0f;
+                    triggerGrain = true;
+                }
+            }
+            else
+            {
+                // Probabilistic mode: random triggering
+                float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
+                float prob = grainsPerSecond / (float) currentSampleRate;
+                triggerGrain = (uniform (rng) < prob);
+            }
         }
 
         if (triggerGrain)
@@ -874,15 +922,24 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
 
     // ========== LOOPING MODE (Block Processing) ==========
     // OPTIMIZATION: Calculate loop parameters once per block (OPTIMIZED: Bit shift)
-    loopLength = static_cast<int>(size * currentSampleRate);
-    loopLength = juce::jlimit(1024, bufferSize >> 1, loopLength);  // OPTIMIZED: Division by 2
+    int targetLoopLength = static_cast<int>(size * currentSampleRate);
+    targetLoopLength = juce::jlimit(1024, bufferSize >> 1, targetLoopLength);  // OPTIMIZED: Division by 2
 
-    double delayTime = position * (bufferSize - loopLength);
-    loopEndPos = writeHead - static_cast<int>(delayTime);
-    if (loopEndPos < 0) loopEndPos += bufferSize;
+    // Smooth loop length changes to prevent clicks (linear interpolation per sample)
+    if (previousLoopLength == 0)
+        previousLoopLength = targetLoopLength;
 
-    loopStartPos = loopEndPos - loopLength;
-    if (loopStartPos < 0) loopStartPos += bufferSize;
+    // Detect significant loop length changes and reset read position safely
+    int lengthDifference = std::abs(targetLoopLength - previousLoopLength);
+    if (lengthDifference > 512)  // Significant change threshold
+    {
+        // Reset loop read position proportionally to avoid clicks
+        if (previousLoopLength > 0 && loopReadPos > 0)
+        {
+            // Scale read position to new loop length
+            loopReadPos = (loopReadPos / previousLoopLength) * targetLoopLength;
+        }
+    }
 
     float pitchRatio = pitchToRatio(pitch);
 
@@ -891,6 +948,18 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
+        // Smoothly interpolate loop length per sample to prevent clicks
+        float t = static_cast<float>(i) / numSamples;
+        loopLength = static_cast<int>(previousLoopLength + t * (targetLoopLength - previousLoopLength));
+        loopLength = juce::jmax(1024, loopLength);  // Ensure minimum loop length
+
+        double delayTime = position * (bufferSize - loopLength);
+        loopEndPos = writeHead - static_cast<int>(delayTime);
+        if (loopEndPos < 0) loopEndPos += bufferSize;
+
+        loopStartPos = loopEndPos - loopLength;
+        if (loopStartPos < 0) loopStartPos += bufferSize;
+
         if (!freeze && bufferSize > 0)
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
@@ -898,17 +967,23 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
+        // Wrap loopReadPos to valid range using fmod (safe for all values)
+        if (loopReadPos >= loopLength || loopReadPos < 0)
+        {
+            loopReadPos = std::fmod(loopReadPos, static_cast<double>(loopLength));
+            if (loopReadPos < 0) loopReadPos += loopLength;
+        }
+
         // Use floating-point position for smooth interpolation (via getSampleFromRing)
         double readPosFloat = loopStartPos + loopReadPos;
 
-        // Wrap position to loop boundaries
-        while (readPosFloat >= loopEndPos)
+        // Wrap position to loop boundaries using fmod (OPTIMIZED: safer than while loops)
+        if (readPosFloat >= loopEndPos || readPosFloat < loopStartPos)
         {
-            readPosFloat -= loopLength;
-        }
-        while (readPosFloat < loopStartPos)
-        {
-            readPosFloat += loopLength;
+            double offset = readPosFloat - loopStartPos;
+            offset = std::fmod(offset, static_cast<double>(loopLength));
+            if (offset < 0) offset += loopLength;
+            readPosFloat = loopStartPos + offset;
         }
 
         // getSampleFromRing handles interpolation and buffer wrapping
@@ -919,11 +994,10 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         wetR[i] = outR;
 
         loopReadPos += pitchRatio;
-        if (loopReadPos >= loopLength)
-        {
-            loopReadPos -= loopLength;
-        }
     }
+
+    // Store current loop length for next block
+    previousLoopLength = targetLoopLength;
 }
 
 void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,

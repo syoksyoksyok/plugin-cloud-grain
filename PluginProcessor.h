@@ -26,7 +26,7 @@ public:
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
-    bool acceptsMidi() const override      { return false; }
+    bool acceptsMidi() const override      { return true; }  // Accept MIDI for TRIG input
     bool producesMidi() const override     { return false; }
     bool isMidiEffect() const override     { return false; }
 
@@ -293,6 +293,7 @@ private:
     int loopStartPos = 0;
     int loopEndPos = 0;
     int loopLength = 0;
+    int previousLoopLength = 0;  // Track changes to prevent clicks
 
     // Spectral mode state (FFT-based using juce::dsp)
     static constexpr int fftOrder = 11;
@@ -347,6 +348,10 @@ private:
 
     std::atomic<float> lastRandomizeValue { 0.0f };
     std::atomic<int> previousMode { 0 };  // Track mode changes for cleanup
+
+    // TRIG system state
+    std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
+    bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
