@@ -450,8 +450,8 @@ void CloudLikeGranularEditor::resized()
 
     auto placeKnob = [] (Knob& k, juce::Rectangle<int> r)
     {
-        // Make knobs larger by reducing margin (was 25, now 10 for 2x size)
-        k.slider.setBounds (r.reduced (10));
+        // Reduce knob size to half by increasing margin
+        k.slider.setBounds (r.reduced (30));
     };
 
     // Row 1: Position, Density, Size, Texture, Pitch
