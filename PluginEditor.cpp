@@ -277,6 +277,43 @@ void CloudLikeGranularEditor::timerCallback()
 
     if (textureKnob.label.getText() != textureLabel)
         textureKnob.label.setText (textureLabel, juce::dontSendNotification);
+
+    // Update LED indicators for tempo visualization
+    // LED 1: Base tempo (×1 quarter note)
+    if (processor.baseTempoBlink.load())
+    {
+        baseTempoLedOn = true;
+        ledBlinkDuration = 3;  // Blink for 3 timer ticks (~100ms at 30Hz)
+        processor.baseTempoBlink.store(false);
+        repaint();
+    }
+    else if (ledBlinkDuration > 0)
+    {
+        ledBlinkDuration--;
+        if (ledBlinkDuration == 0)
+        {
+            baseTempoLedOn = false;
+            repaint();
+        }
+    }
+
+    // LED 2: TRIG RATE tempo
+    if (processor.trigRateBlink.load())
+    {
+        trigRateLedOn = true;
+        ledBlinkDuration2 = 3;  // Blink for 3 timer ticks (~100ms at 30Hz)
+        processor.trigRateBlink.store(false);
+        repaint();
+    }
+    else if (ledBlinkDuration2 > 0)
+    {
+        ledBlinkDuration2--;
+        if (ledBlinkDuration2 == 0)
+        {
+            trigRateLedOn = false;
+            repaint();
+        }
+    }
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel)
@@ -327,6 +364,41 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.setColour (uiColors.buttonText);
         g.drawRoundedRectangle (freezeBounds, 0.0f, 2.0f);
     }
+
+    // Draw LED indicators (tempo visualization)
+    // Position LEDs in the row 3 area, left of TRIG Rate knob
+    auto ledSize = 12.0f;
+    auto ledY = getHeight() - 200.0f;  // Align with row 3
+    auto ledX1 = 80.0f;   // LED 1: Base tempo (×1)
+    auto ledX2 = 110.0f;  // LED 2: TRIG RATE tempo
+
+    // LED 1: Base tempo (×1 quarter note)
+    g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
+    g.fillEllipse (ledX1, ledY, ledSize, ledSize);
+    if (baseTempoLedOn)
+    {
+        g.setColour (juce::Colour::fromRGB (100, 180, 100));  // On color (green)
+        g.fillEllipse (ledX1 + 2, ledY + 2, ledSize - 4, ledSize - 4);
+    }
+    g.setColour (uiColors.buttonText);
+    g.drawEllipse (ledX1, ledY, ledSize, ledSize, 1.5f);
+
+    // LED 2: TRIG RATE tempo
+    g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
+    g.fillEllipse (ledX2, ledY, ledSize, ledSize);
+    if (trigRateLedOn)
+    {
+        g.setColour (juce::Colour::fromRGB (180, 100, 100));  // On color (red)
+        g.fillEllipse (ledX2 + 2, ledY + 2, ledSize - 4, ledSize - 4);
+    }
+    g.setColour (uiColors.buttonText);
+    g.drawEllipse (ledX2, ledY, ledSize, ledSize, 1.5f);
+
+    // LED labels
+    g.setColour (uiColors.knobLabel);
+    g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
+    g.drawText ("×1", ledX1 - 5, ledY + ledSize + 2, ledSize + 10, 12, juce::Justification::centred);
+    g.drawText ("TRIG", ledX2 - 8, ledY + ledSize + 2, ledSize + 16, 12, juce::Justification::centred);
 }
 
 void CloudLikeGranularEditor::resized()

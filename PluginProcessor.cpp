@@ -457,6 +457,34 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     if (!trigMode)  // Manual/MIDI mode
     {
+        // In Manual mode: LED 1 = MIDI triggers, LED 2 = base tempo
+
+        // LED 2: Base tempo (×1 quarter note) in Manual mode
+        auto playHead = getPlayHead();
+        if (playHead != nullptr)
+        {
+            juce::Optional<juce::AudioPlayHead::PositionInfo> posInfo = playHead->getPosition();
+            if (posInfo.hasValue() && posInfo->getBpm().hasValue())
+            {
+                double bpm = *posInfo->getBpm();
+                double baseNoteValue = 1.0 / 4.0;  // Quarter note
+                double beatsPerSecond = bpm / 60.0;
+                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
+                double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    baseTempoPhase += basePhaseIncrement;
+                    if (baseTempoPhase >= 1.0)
+                    {
+                        baseTempoPhase -= 1.0;
+                        trigRateBlink.store(true);  // LED 2: Base tempo in Manual mode
+                    }
+                }
+            }
+        }
+
+        // LED 1: MIDI note triggers in Manual mode
         bool currentMidiNoteState = false;
 
         for (const auto metadata : midi)
@@ -472,6 +500,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 if (currentMidiNoteState != lastMidiNoteState)
                 {
                     triggerReceived.store(true);
+                    baseTempoBlink.store(true);  // LED 1: MIDI trigger in Manual mode
                     lastMidiNoteState = currentMidiNoteState;
                 }
             }
@@ -479,6 +508,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
     else  // Auto/Tempo Sync mode
     {
+        // In Auto mode: LED 1 = base tempo, LED 2 = TRIG RATE tempo
+
         // Get tempo info from DAW
         auto playHead = getPlayHead();
         if (playHead != nullptr)
@@ -513,14 +544,29 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 double triggersPerSecond = beatsPerSecond / noteValue;
                 double phaseIncrement = triggersPerSecond / currentSampleRate;
 
+                // Calculate base tempo LED phase (always ×1 quarter note)
+                double baseNoteValue = 1.0 / 4.0;  // Quarter note
+                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
+                double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
+
                 // Accumulate phase and generate triggers
                 for (int i = 0; i < numSamples; ++i)
                 {
+                    // LED 2: TRIG RATE tempo sync (with rate divisions/multiplications)
                     tempoSyncPhase += phaseIncrement;
                     if (tempoSyncPhase >= 1.0)
                     {
                         tempoSyncPhase -= 1.0;
                         triggerReceived.store(true);
+                        trigRateBlink.store(true);  // LED 2: Blink at TRIG RATE tempo
+                    }
+
+                    // LED 1: Base tempo (×1 quarter note) in Auto mode
+                    baseTempoPhase += basePhaseIncrement;
+                    if (baseTempoPhase >= 1.0)
+                    {
+                        baseTempoPhase -= 1.0;
+                        baseTempoBlink.store(true);  // LED 1: Base tempo in Auto mode
                     }
                 }
             }

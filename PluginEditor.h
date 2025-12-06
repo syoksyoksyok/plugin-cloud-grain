@@ -212,6 +212,12 @@ private:
     juce::TextButton randomButton { "Randomize" };
     juce::Label modeLabel;  // Displays current mode (Granular/Pitch Shifter/etc.)
 
+    // LED indicators for tempo visualization
+    bool baseTempoLedOn = false;   // LED 1: Base tempo (×1) indicator
+    bool trigRateLedOn = false;    // LED 2: TRIG RATE tempo indicator
+    int ledBlinkDuration = 0;      // Counter for LED blink duration (in timer ticks)
+    int ledBlinkDuration2 = 0;     // Counter for second LED
+
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
