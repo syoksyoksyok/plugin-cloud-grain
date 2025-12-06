@@ -46,6 +46,10 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // LED indicators for tempo visualization (public for UI access)
+    std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo or MIDI triggers
+    std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo
+
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     // Grain structure (public for potential visualization)
@@ -353,11 +357,7 @@ private:
     std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
     bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
-
-    // LED indicators for tempo visualization
-    std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo (×1, quarter note)
-    std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo
-    double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED (always ×1)
+    double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
