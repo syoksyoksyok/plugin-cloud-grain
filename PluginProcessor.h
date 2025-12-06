@@ -293,6 +293,7 @@ private:
     int loopStartPos = 0;
     int loopEndPos = 0;
     int loopLength = 0;
+    int previousLoopLength = 0;  // Track changes to prevent clicks
 
     // Spectral mode state (FFT-based using juce::dsp)
     static constexpr int fftOrder = 11;

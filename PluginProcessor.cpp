@@ -874,15 +874,24 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
 
     // ========== LOOPING MODE (Block Processing) ==========
     // OPTIMIZATION: Calculate loop parameters once per block (OPTIMIZED: Bit shift)
-    loopLength = static_cast<int>(size * currentSampleRate);
-    loopLength = juce::jlimit(1024, bufferSize >> 1, loopLength);  // OPTIMIZED: Division by 2
+    int targetLoopLength = static_cast<int>(size * currentSampleRate);
+    targetLoopLength = juce::jlimit(1024, bufferSize >> 1, targetLoopLength);  // OPTIMIZED: Division by 2
 
-    double delayTime = position * (bufferSize - loopLength);
-    loopEndPos = writeHead - static_cast<int>(delayTime);
-    if (loopEndPos < 0) loopEndPos += bufferSize;
+    // Smooth loop length changes to prevent clicks (linear interpolation per sample)
+    if (previousLoopLength == 0)
+        previousLoopLength = targetLoopLength;
 
-    loopStartPos = loopEndPos - loopLength;
-    if (loopStartPos < 0) loopStartPos += bufferSize;
+    // Detect significant loop length changes and reset read position safely
+    int lengthDifference = std::abs(targetLoopLength - previousLoopLength);
+    if (lengthDifference > 512)  // Significant change threshold
+    {
+        // Reset loop read position proportionally to avoid clicks
+        if (previousLoopLength > 0 && loopReadPos > 0)
+        {
+            // Scale read position to new loop length
+            loopReadPos = (loopReadPos / previousLoopLength) * targetLoopLength;
+        }
+    }
 
     float pitchRatio = pitchToRatio(pitch);
 
@@ -891,6 +900,18 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
+        // Smoothly interpolate loop length per sample to prevent clicks
+        float t = static_cast<float>(i) / numSamples;
+        loopLength = static_cast<int>(previousLoopLength + t * (targetLoopLength - previousLoopLength));
+        loopLength = juce::jmax(1024, loopLength);  // Ensure minimum loop length
+
+        double delayTime = position * (bufferSize - loopLength);
+        loopEndPos = writeHead - static_cast<int>(delayTime);
+        if (loopEndPos < 0) loopEndPos += bufferSize;
+
+        loopStartPos = loopEndPos - loopLength;
+        if (loopStartPos < 0) loopStartPos += bufferSize;
+
         if (!freeze && bufferSize > 0)
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
@@ -898,17 +919,23 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
+        // Wrap loopReadPos to valid range using fmod (safe for all values)
+        if (loopReadPos >= loopLength || loopReadPos < 0)
+        {
+            loopReadPos = std::fmod(loopReadPos, static_cast<double>(loopLength));
+            if (loopReadPos < 0) loopReadPos += loopLength;
+        }
+
         // Use floating-point position for smooth interpolation (via getSampleFromRing)
         double readPosFloat = loopStartPos + loopReadPos;
 
-        // Wrap position to loop boundaries
-        while (readPosFloat >= loopEndPos)
+        // Wrap position to loop boundaries using fmod (OPTIMIZED: safer than while loops)
+        if (readPosFloat >= loopEndPos || readPosFloat < loopStartPos)
         {
-            readPosFloat -= loopLength;
-        }
-        while (readPosFloat < loopStartPos)
-        {
-            readPosFloat += loopLength;
+            double offset = readPosFloat - loopStartPos;
+            offset = std::fmod(offset, static_cast<double>(loopLength));
+            if (offset < 0) offset += loopLength;
+            readPosFloat = loopStartPos + offset;
         }
 
         // getSampleFromRing handles interpolation and buffer wrapping
@@ -919,11 +946,10 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         wetR[i] = outR;
 
         loopReadPos += pitchRatio;
-        if (loopReadPos >= loopLength)
-        {
-            loopReadPos -= loopLength;
-        }
     }
+
+    // Store current loop length for next block
+    previousLoopLength = targetLoopLength;
 }
 
 void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,
