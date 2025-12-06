@@ -65,11 +65,17 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (modeLabel);
+    addAndMakeVisible (trigRateLabel);
 
     // Style mode label (E-Paper: ink blue for accent)
     modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
     modeLabel.setColour (juce::Label::textColourId, uiColors.modeLabel);
     modeLabel.setJustificationType (juce::Justification::centred);
+
+    // Style TRIG RATE label (E-Paper: shows current division)
+    trigRateLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
+    trigRateLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    trigRateLabel.setJustificationType (juce::Justification::centred);
 
     // Style TRIG Mode toggle button (E-Paper: matte black text)
     trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
@@ -278,6 +284,27 @@ void CloudLikeGranularEditor::timerCallback()
     if (textureKnob.label.getText() != textureLabel)
         textureKnob.label.setText (textureLabel, juce::dontSendNotification);
 
+    // Update TRIG RATE label to show current division
+    float trigRate = processor.apvts.getRawParameterValue ("trigRate")->load();
+    juce::String trigRateText;
+
+    if (trigRate < -3.4f)      trigRateText = "1/16";
+    else if (trigRate < -2.8f) trigRateText = "1/16T";
+    else if (trigRate < -2.2f) trigRateText = "1/8";
+    else if (trigRate < -1.6f) trigRateText = "1/8T";
+    else if (trigRate < -0.8f) trigRateText = "1/4";
+    else if (trigRate < 0.0f)  trigRateText = "1/4T";
+    else if (trigRate < 0.8f)  trigRateText = "1/2";
+    else if (trigRate < 1.6f)  trigRateText = "1/2T";
+    else if (trigRate < 2.4f)  trigRateText = "1 bar";
+    else if (trigRate < 3.2f)  trigRateText = "1 barT";
+    else                       trigRateText = "2 bars";
+
+    if (trigRateLabel.getText() != trigRateText)
+    {
+        trigRateLabel.setText (trigRateText, juce::dontSendNotification);
+    }
+
     // Update LED indicators for tempo visualization
     // LED 1: Base tempo (×1 quarter note)
     if (processor.baseTempoBlink.load())
@@ -444,6 +471,10 @@ void CloudLikeGranularEditor::resized()
     // Row 3: TRIG Rate (centered, single knob)
     auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
     placeKnob (trigRateKnob, trigRateArea);
+
+    // TRIG RATE label (shows current division: 1/16, 1/8T, etc.)
+    auto trigRateLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() + 35);
+    trigRateLabel.setBounds (trigRateLabelArea);
 
     // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
     // All buttons have equal size and spacing
