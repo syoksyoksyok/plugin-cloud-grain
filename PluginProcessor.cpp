@@ -477,6 +477,55 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             }
         }
     }
+    else  // Auto/Tempo Sync mode
+    {
+        // Get tempo info from DAW
+        auto playHead = getPlayHead();
+        if (playHead != nullptr)
+        {
+            juce::Optional<juce::AudioPlayHead::PositionInfo> posInfo = playHead->getPosition();
+            if (posInfo.hasValue() && posInfo->getBpm().hasValue())
+            {
+                double bpm = *posInfo->getBpm();
+                float trigRate = apvts.getRawParameterValue ("trigRate")->load();
+
+                // Calculate trigger frequency in Hz based on trigRate parameter
+                // trigRate: -4.0 to +4.0
+                // Center (0) = 1/4 note
+                // Negative = divisions (1/8, 1/16, etc.)
+                // Positive = multiplications (1/2, 1 bar, 2 bars, etc.)
+                // Support triplets at certain values
+
+                double noteValue = 0.25;  // Quarter note base
+
+                if (trigRate < -3.5f)      noteValue = 1.0 / 16.0;  // 1/16 note
+                else if (trigRate < -2.5f) noteValue = 1.0 / 12.0;  // 1/16 triplet
+                else if (trigRate < -1.5f) noteValue = 1.0 / 8.0;   // 1/8 note
+                else if (trigRate < -0.5f) noteValue = 1.0 / 6.0;   // 1/8 triplet
+                else if (trigRate < 0.5f)  noteValue = 1.0 / 4.0;   // 1/4 note
+                else if (trigRate < 1.5f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
+                else if (trigRate < 2.5f)  noteValue = 1.0 / 2.0;   // 1/2 note
+                else if (trigRate < 3.5f)  noteValue = 1.0;         // 1 bar
+                else                       noteValue = 2.0;         // 2 bars
+
+                // Calculate frequency: triggers per second
+                double beatsPerSecond = bpm / 60.0;
+                double triggersPerSecond = beatsPerSecond / noteValue;
+                double phaseIncrement = triggersPerSecond / currentSampleRate;
+
+                // Accumulate phase and generate triggers
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    tempoSyncPhase += phaseIncrement;
+                    if (tempoSyncPhase >= 1.0)
+                    {
+                        tempoSyncPhase -= 1.0;
+                        triggerReceived.store(true);
+                    }
+                }
+            }
+        }
+    }
 
     midi.clear();  // Clear MIDI output (we don't produce MIDI)
 
@@ -866,6 +915,14 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Force new WSOLA segment capture (Clouds TRIG behavior)
+        if (i == 0 && triggerReceived.load())
+        {
+            // Reset read position to capture fresh segment from current buffer position
+            pitchShifterReadPos = 0.0;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -945,6 +1002,15 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Extract grain from loop (Clouds TRIG behavior)
+        // Generate a short burst/grain from the loop at a position based on POSITION parameter
+        if (i == 0 && triggerReceived.load())
+        {
+            // Use POSITION to determine where in the loop to extract grain
+            loopReadPos = position * loopLength;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1015,6 +1081,15 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Force FFT frame update (Clouds TRIG behavior)
+        // Reset input position to trigger fresh spectral analysis
+        if (i == 0 && triggerReceived.load())
+        {
+            spectralInputPos = 0;
+            spectralOutputPos = 0;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1129,6 +1204,15 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Trigger reverb reflection/echo event (Clouds TRIG behavior)
+        // Inject impulse into reverb taps to create echo burst
+        bool triggerImpulse = false;
+        if (i == 0 && triggerReceived.load())
+        {
+            triggerImpulse = true;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1165,7 +1249,11 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
 
             // Write input + feedback (OPTIMIZED: Bit shift for division by 8)
             float inputMix = (t & 1) ? inSampleR : inSampleL;  // OPTIMIZED: Bit mask instead of modulo
-            tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback;
+
+            // TRIG: Inject impulse into tap to create reflection/echo event
+            float impulse = triggerImpulse ? ((t & 1) ? inSampleR : inSampleL) * 2.0f : 0.0f;
+
+            tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback + impulse;
             tap.writePos = (tap.writePos + 1) & tap.bufferSizeMask;  // OPTIMIZED: Bit mask
 
             // Accumulate to output (alternate L/R)
@@ -1208,6 +1296,14 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Excite all resonators (Kammerl/Parasites behavior)
+        bool triggerExcitation = false;
+        if (i == 0 && triggerReceived.load())
+        {
+            triggerExcitation = true;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1224,6 +1320,10 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
 
         // Excite resonators based on input energy
         float inputEnergy = std::abs(inSampleL) + std::abs(inSampleR);
+
+        // TRIG: Force excitation with impulse
+        if (triggerExcitation)
+            inputEnergy = 1.0f;
 
         // Process each resonator
         for (int r = 0; r < maxResonators; ++r)
@@ -1313,6 +1413,14 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // TRIG input: Capture new beat repeat segment (Kammerl behavior)
+        bool triggerCapture = false;
+        if (i == 0 && triggerReceived.load())
+        {
+            triggerCapture = true;
+            triggerReceived.store(false);
+        }
+
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1323,11 +1431,15 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        // Trigger capture based on repeat rate
+        // Trigger capture based on repeat rate (or manual TRIG)
         beatRepeat.stutterPhase += repeatRate / currentSampleRate;
-        if (beatRepeat.stutterPhase >= 1.0f)
+        if (beatRepeat.stutterPhase >= 1.0f || triggerCapture)
         {
-            beatRepeat.stutterPhase -= 1.0f;
+            if (!triggerCapture)
+                beatRepeat.stutterPhase -= 1.0f;
+            else
+                beatRepeat.stutterPhase = 0.0f;  // Reset phase on manual trigger
+
             beatRepeat.isCapturing = true;
             beatRepeat.repeatPos = 0;
 
