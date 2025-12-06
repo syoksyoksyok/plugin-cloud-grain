@@ -410,5 +410,25 @@ private:
                                  float density, float texture,
                                  float feedback, bool freeze);
 
+public:
+    // Grain visualization support
+    struct GrainVisualizationData
+    {
+        float position = 0.0f;      // 0-1: Position in buffer
+        float pitch = 0.0f;         // -24 to +24: Semitones
+        float envelope = 0.0f;      // 0-1: Current envelope value
+        bool active = false;
+    };
+
+    static constexpr int maxVisualGrains = 50;
+
+    // Thread-safe grain data copy for visualization
+    void copyGrainDataForVisualization(std::array<GrainVisualizationData, maxVisualGrains>& dest, int& count);
+
+private:
+    // Visualization data (updated in processBlock)
+    std::array<GrainVisualizationData, maxVisualGrains> visualizationGrains;
+    std::atomic<int> activeVisualizationGrainCount { 0 };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularProcessor)
 };

@@ -721,6 +721,31 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
         wetL[i] = outputL;
         wetR[i] = outputR;
     }
+
+    // Update visualization data (thread-safe)
+    int visCount = 0;
+    for (int idx = 0; idx < maxGrains && visCount < maxVisualGrains; ++idx)
+    {
+        auto& g = grains[idx];
+        if (!g.active || g.preDelay > 0) continue;
+
+        // Calculate envelope value (Hann window)
+        float normalizedPhase = static_cast<float>(g.position / g.durationSamples);
+        float envelope = 0.5f * (1.0f - std::cos(juce::MathConstants<float>::twoPi * normalizedPhase));
+
+        auto& vg = visualizationGrains[visCount];
+        vg.position = static_cast<float>(std::fmod(g.startSample / bufferSize, 1.0));
+        vg.pitch = pitch;  // Use current pitch parameter
+        vg.envelope = envelope;
+        vg.active = true;
+        visCount++;
+    }
+
+    // Clear remaining slots
+    for (int i = visCount; i < maxVisualGrains; ++i)
+        visualizationGrains[i].active = false;
+
+    activeVisualizationGrainCount.store(visCount);
 }
 
 void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<float>& buffer, int numSamples,
@@ -1273,6 +1298,14 @@ void CloudLikeGranularProcessor::randomizeParameters()
 juce::AudioProcessorEditor* CloudLikeGranularProcessor::createEditor()
 {
     return new CloudLikeGranularEditor (*this);
+}
+
+void CloudLikeGranularProcessor::copyGrainDataForVisualization(
+    std::array<GrainVisualizationData, maxVisualGrains>& dest, int& count)
+{
+    // Thread-safe copy of visualization data
+    count = activeVisualizationGrainCount.load();
+    dest = visualizationGrains;
 }
 
 void CloudLikeGranularProcessor::getStateInformation (juce::MemoryBlock& destData)

@@ -109,6 +109,62 @@ public:
 };
 
 //==============================================================================
+// Grain Visualizer Component
+class GrainVisualizer : public juce::Component, public juce::Timer
+{
+public:
+    GrainVisualizer(CloudLikeGranularProcessor& proc) : processor(proc)
+    {
+        startTimerHz(30);  // 30 FPS
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        // E-Paper background
+        g.fillAll(juce::Colour::fromRGB(250, 250, 250));
+
+        // Draw grains
+        for (const auto& grain : grainData)
+        {
+            if (!grain.active) continue;
+
+            float env = grain.envelope;
+            float x = grain.position * getWidth();
+            float y = getHeight() / 2.0f + (grain.pitch / 24.0f) * (getHeight() / 3.0f);
+
+            // Lighter grayscale particles
+            float alpha = env * 0.6f + 0.15f;
+            int grayValue = static_cast<int>(120 + env * 40);
+            auto color = juce::Colour::fromRGBA(grayValue, grayValue, grayValue, static_cast<juce::uint8>(alpha * 255));
+
+            // Draw particle
+            float radius = 15.0f * env;
+            g.setColour(color);
+            g.fillEllipse(x - radius, y - radius, radius * 2, radius * 2);
+
+            // Subtle outline
+            g.setColour(juce::Colour::fromRGBA(80, 80, 80, static_cast<juce::uint8>(alpha * 102)));
+            g.drawEllipse(x - radius, y - radius, radius * 2, radius * 2, 1.0f);
+        }
+    }
+
+    void timerCallback() override
+    {
+        processor.copyGrainDataForVisualization(grainData, activeCount);
+        repaint();
+    }
+
+    int getActiveGrainCount() const { return activeCount; }
+
+private:
+    CloudLikeGranularProcessor& processor;
+    std::array<CloudLikeGranularProcessor::GrainVisualizationData, CloudLikeGranularProcessor::maxVisualGrains> grainData;
+    int activeCount = 0;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVisualizer)
+};
+
+//==============================================================================
 class CloudLikeGranularEditor  : public juce::AudioProcessorEditor
                                , public juce::AsyncUpdater
                                , public juce::Timer
@@ -139,6 +195,11 @@ private:
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::ToggleButton randomButton { "Randomize" };
     juce::Label modeLabel;  // Displays current mode (Granular/Pitch Shifter/etc.)
+
+    // Grain Visualizer
+    GrainVisualizer grainVisualizer;
+    juce::Label grainCountLabel;
+    juce::Label densityInfoLabel;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;

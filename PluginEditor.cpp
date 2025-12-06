@@ -3,10 +3,13 @@
 
 //==============================================================================
 CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p), processor (p), grainVisualizer(p)
 {
-    setSize (600, 400);  // E-Paper UI: 600x400
+    setSize (600, 1200);  // E-Paper UI with Visualizer: 600x1200
     startTimerHz (30);  // Update button states at 30Hz
+
+    // Add grain visualizer
+    addAndMakeVisible (grainVisualizer);
 
     setupKnob (modeKnob, "Mode");
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
@@ -26,6 +29,18 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (modeLabel);
+
+    // Add info labels
+    addAndMakeVisible (grainCountLabel);
+    addAndMakeVisible (densityInfoLabel);
+
+    grainCountLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+    grainCountLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (102, 102, 102));
+    grainCountLabel.setJustificationType (juce::Justification::centred);
+
+    densityInfoLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+    densityInfoLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (102, 102, 102));
+    densityInfoLabel.setJustificationType (juce::Justification::centred);
 
     // Style mode label (E-Paper: ink blue for accent)
     modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
@@ -210,6 +225,14 @@ void CloudLikeGranularEditor::timerCallback()
 
     if (textureKnob.label.getText() != textureLabel)
         textureKnob.label.setText (textureLabel, juce::dontSendNotification);
+
+    // Update info labels
+    grainCountLabel.setText ("Active Grains: " + juce::String(grainVisualizer.getActiveGrainCount()),
+                             juce::dontSendNotification);
+
+    float density = processor.apvts.getRawParameterValue ("density")->load();
+    densityInfoLabel.setText ("Density: " + juce::String(static_cast<int>(density * 100)) + "%",
+                              juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
@@ -272,16 +295,27 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
 
 void CloudLikeGranularEditor::resized()
 {
-    auto area = getLocalBounds().reduced (10);
+    auto area = getLocalBounds();
 
-    // E-Paper UI: Mode label at top center
-    auto titleArea = area.removeFromTop (35);
+    // Top half: Grain Visualizer (600px)
+    auto visualizerArea = area.removeFromTop (600);
+    grainVisualizer.setBounds (visualizerArea);
+
+    // Bottom half: Controls (600px)
+    auto controlsArea = area;
+    controlsArea.reduce (10, 10);
+
+    // Mode label at top of controls
+    auto titleArea = controlsArea.removeFromTop (35);
     modeLabel.setBounds (titleArea.withTrimmedLeft (titleArea.getWidth() / 4)
                                    .withTrimmedRight (titleArea.getWidth() / 4));
 
-    // E-Paper UI: 2 rows × 5 columns grid
-    auto buttonRow = area.removeFromBottom (50);
-    auto knobArea = area.reduced (0, 10);
+    // Info display above buttons
+    auto infoRow = controlsArea.removeFromBottom (30);
+    auto buttonRow = controlsArea.removeFromBottom (50);
+
+    // Knob area
+    auto knobArea = controlsArea.reduced (0, 10);
 
     auto rowHeight = knobArea.getHeight() / 2;
     auto row1 = knobArea.removeFromTop (rowHeight);
@@ -318,4 +352,9 @@ void CloudLikeGranularEditor::resized()
 
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
+
+    // Info labels at bottom
+    auto infoHalf = infoRow.getWidth() / 2;
+    grainCountLabel.setBounds (infoRow.removeFromLeft (infoHalf));
+    densityInfoLabel.setBounds (infoRow);
 }
