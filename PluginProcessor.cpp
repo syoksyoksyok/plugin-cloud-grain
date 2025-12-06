@@ -457,9 +457,9 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     if (!trigMode)  // Manual/MIDI mode
     {
-        // In Manual mode: LED 1 = MIDI triggers, LED 2 = base tempo
+        // In Manual mode: LED 1 = MIDI triggers, LED 2 = TRIG RATE tempo
 
-        // LED 2: Base tempo (×1 quarter note) in Manual mode
+        // LED 2: TRIG RATE tempo in Manual mode (same calculation as Auto mode)
         auto playHead = getPlayHead();
         if (playHead != nullptr)
         {
@@ -467,18 +467,32 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (posInfo.hasValue() && posInfo->getBpm().hasValue())
             {
                 double bpm = *posInfo->getBpm();
-                double baseNoteValue = 1.0 / 4.0;  // Quarter note
+                float trigRate = apvts.getRawParameterValue ("trigRate")->load();
+
+                // Calculate note value based on TRIG RATE parameter
+                double noteValue = 0.25;  // Quarter note base
+
+                if (trigRate < -3.5f)      noteValue = 1.0 / 16.0;  // 1/16 note
+                else if (trigRate < -2.5f) noteValue = 1.0 / 12.0;  // 1/16 triplet
+                else if (trigRate < -1.5f) noteValue = 1.0 / 8.0;   // 1/8 note
+                else if (trigRate < -0.5f) noteValue = 1.0 / 6.0;   // 1/8 triplet
+                else if (trigRate < 0.5f)  noteValue = 1.0 / 4.0;   // 1/4 note
+                else if (trigRate < 1.5f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
+                else if (trigRate < 2.5f)  noteValue = 1.0 / 2.0;   // 1/2 note
+                else if (trigRate < 3.5f)  noteValue = 1.0;         // 1 bar
+                else                       noteValue = 2.0;         // 2 bars
+
                 double beatsPerSecond = bpm / 60.0;
-                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
-                double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
+                double triggersPerSecond = beatsPerSecond / noteValue;
+                double phaseIncrement = triggersPerSecond / currentSampleRate;
 
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    baseTempoPhase += basePhaseIncrement;
-                    if (baseTempoPhase >= 1.0)
+                    tempoSyncPhase += phaseIncrement;
+                    if (tempoSyncPhase >= 1.0)
                     {
-                        baseTempoPhase -= 1.0;
-                        trigRateBlink.store(true);  // LED 2: Base tempo in Manual mode
+                        tempoSyncPhase -= 1.0;
+                        trigRateBlink.store(true);  // LED 2: TRIG RATE tempo in Manual mode
                     }
                 }
             }
