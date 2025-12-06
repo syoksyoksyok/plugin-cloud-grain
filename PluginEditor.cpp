@@ -10,21 +10,56 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setSize (600, 400);  // E-Paper UI: 600x400
     startTimerHz (30);  // Update button states at 30Hz
 
-    setupKnob (modeKnob, "Mode");
+    // Initialize per-knob LookAndFeel instances with their respective colors
+    positionLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    positionLookAndFeel->knobColors = &uiColors.position;
+
+    densityLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    densityLookAndFeel->knobColors = &uiColors.density;
+
+    sizeLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    sizeLookAndFeel->knobColors = &uiColors.size;
+
+    textureLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    textureLookAndFeel->knobColors = &uiColors.texture;
+
+    pitchLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    pitchLookAndFeel->knobColors = &uiColors.pitch;
+
+    spreadLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    spreadLookAndFeel->knobColors = &uiColors.spread;
+
+    feedbackLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    feedbackLookAndFeel->knobColors = &uiColors.feedback;
+
+    reverbLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    reverbLookAndFeel->knobColors = &uiColors.reverb;
+
+    mixLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    mixLookAndFeel->knobColors = &uiColors.mix;
+
+    modeLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    modeLookAndFeel->knobColors = &uiColors.mode;
+
+    trigRateLookAndFeel = std::make_unique<EPaperLookAndFeel>();
+    trigRateLookAndFeel->knobColors = &uiColors.trigRate;
+
+    // Setup knobs with their individual LookAndFeel instances
+    setupKnob (modeKnob, "Mode", modeLookAndFeel.get());
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
     modeKnob.slider.setNumDecimalPlacesToDisplay(0);  // Display integers only
 
-    setupKnob (positionKnob, "Position");
-    setupKnob (sizeKnob,     "Size");
-    setupKnob (pitchKnob,    "Pitch");
-    setupKnob (densityKnob,  "Density");
-    setupKnob (textureKnob,  "Texture");
-    setupKnob (spreadKnob,   "Spread");
-    setupKnob (feedbackKnob, "Feedback");
-    setupKnob (reverbKnob,   "Reverb");
-    setupKnob (mixKnob,      "Mix");
-    setupKnob (trigRateKnob, "Trig Rate");
+    setupKnob (positionKnob, "Position", positionLookAndFeel.get());
+    setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
+    setupKnob (pitchKnob,    "Pitch",    pitchLookAndFeel.get());
+    setupKnob (densityKnob,  "Density",  densityLookAndFeel.get());
+    setupKnob (textureKnob,  "Texture",  textureLookAndFeel.get());
+    setupKnob (spreadKnob,   "Spread",   spreadLookAndFeel.get());
+    setupKnob (feedbackKnob, "Feedback", feedbackLookAndFeel.get());
+    setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get());
+    setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get());
+    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get());
 
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
@@ -33,27 +68,27 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     // Style mode label (E-Paper: ink blue for accent)
     modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
-    modeLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (52, 73, 94));  // Ink blue
+    modeLabel.setColour (juce::Label::textColourId, uiColors.modeLabel);
     modeLabel.setJustificationType (juce::Justification::centred);
 
     // Style TRIG Mode toggle button (E-Paper: matte black text)
-    trigModeButton.setColour (juce::ToggleButton::textColourId, juce::Colour::fromRGB (26, 26, 26));
-    trigModeButton.setColour (juce::ToggleButton::tickColourId, juce::Colour::fromRGB (26, 26, 26));
+    trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
+    trigModeButton.setColour (juce::ToggleButton::tickColourId, uiColors.buttonText);
     trigModeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
     trigModeButton.setLookAndFeel (ePaperLookAndFeel.get());
 
-    // Style Freeze button (E-Paper: matte black text)
-    freezeButton.setColour (juce::ToggleButton::textColourId, juce::Colour::fromRGB (26, 26, 26));
-    freezeButton.setColour (juce::ToggleButton::tickColourId, juce::Colour::fromRGB (26, 26, 26));
+    // Style Freeze button (E-Paper: matte black text, color changes when ON)
+    freezeButton.setColour (juce::ToggleButton::textColourId, uiColors.freezeTextOff);
+    freezeButton.setColour (juce::ToggleButton::tickColourId, uiColors.buttonText);
     freezeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
     freezeButton.setLookAndFeel (ePaperLookAndFeel.get());
 
     // Style Randomize button (E-Paper: matte black text, off-white background)
-    randomButton.setColour (juce::TextButton::buttonColourId, juce::Colour::fromRGB (250, 250, 250));
-    randomButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour::fromRGB (224, 224, 224));
-    randomButton.setColour (juce::TextButton::textColourOffId, juce::Colour::fromRGB (26, 26, 26));
-    randomButton.setColour (juce::TextButton::textColourOnId, juce::Colour::fromRGB (26, 26, 26));
-    randomButton.setColour (juce::ComboBox::outlineColourId, juce::Colour::fromRGB (26, 26, 26));
+    randomButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    randomButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
+    randomButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    randomButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    randomButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     randomButton.setLookAndFeel (ePaperLookAndFeel.get());
 
     // Trigger randomize parameter when button is clicked (MIDI/Ableton mappable)
@@ -124,12 +159,19 @@ void CloudLikeGranularEditor::timerCallback()
         trigModeButton.setToggleState (trigMode, juce::dontSendNotification);
     }
 
-    // Update freeze button visual state based on parameter
+    // Update freeze button visual state and text color based on parameter
     bool freezeState = processor.apvts.getRawParameterValue ("freeze")->load() > 0.5f;
     if (freezeButton.getToggleState() != freezeState)
     {
         freezeButton.setToggleState (freezeState, juce::dontSendNotification);
         repaint();  // Repaint entire editor to update button highlights
+    }
+
+    // Change Freeze button text color when ON
+    juce::Colour freezeTextColor = freezeState ? uiColors.freezeTextOn : uiColors.freezeTextOff;
+    if (freezeButton.findColour (juce::ToggleButton::textColourId) != freezeTextColor)
+    {
+        freezeButton.setColour (juce::ToggleButton::textColourId, freezeTextColor);
     }
 
     // Update mode label and knob labels based on mode parameter
@@ -237,7 +279,7 @@ void CloudLikeGranularEditor::timerCallback()
         textureKnob.label.setText (textureLabel, juce::dontSendNotification);
 }
 
-void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
+void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel)
 {
     addAndMakeVisible (k.slider);
     addAndMakeVisible (k.label);
@@ -246,28 +288,28 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
     k.slider.setPopupDisplayEnabled (true, false, this);
 
-    // Apply E-Paper LookAndFeel
-    k.slider.setLookAndFeel (ePaperLookAndFeel.get());
+    // Apply E-Paper LookAndFeel (with per-knob colors)
+    k.slider.setLookAndFeel (lookAndFeel);
 
     // E-Paper styling for text box and label
-    k.slider.setColour (juce::Slider::textBoxTextColourId, juce::Colour::fromRGB (102, 102, 102));
+    k.slider.setColour (juce::Slider::textBoxTextColourId, uiColors.knobLabel);
     k.slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     k.slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
 
     k.label.setText (name, juce::dontSendNotification);
     k.label.attachToComponent (&k.slider, false);
     k.label.setJustificationType (juce::Justification::centred);
-    k.label.setColour (juce::Label::textColourId, juce::Colour::fromRGB (26, 26, 26));
+    k.label.setColour (juce::Label::textColourId, uiColors.knobLabel);
     k.label.setFont (juce::Font ("Courier New", 12.0f, juce::Font::plain));
 }
 
 void CloudLikeGranularEditor::paint (juce::Graphics& g)
 {
-    // E-Paper UI: Off-white background
-    g.fillAll (juce::Colour::fromRGB (250, 250, 250));
+    // E-Paper UI: Background
+    g.fillAll (uiColors.background);
 
     // Draw border
-    g.setColour (juce::Colour::fromRGB (26, 26, 26));
+    g.setColour (uiColors.buttonText);
     g.drawRect (getLocalBounds(), 2);
 
     // Draw separator line below mode label
@@ -282,7 +324,7 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     if (freezeButton.getToggleState())
     {
         auto freezeBounds = freezeButton.getBounds().toFloat().reduced (1.0f);
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        g.setColour (uiColors.buttonText);
         g.drawRoundedRectangle (freezeBounds, 0.0f, 2.0f);
     }
 }

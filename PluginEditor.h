@@ -5,10 +5,61 @@
 #include "PluginProcessor.h"
 
 //==============================================================================
+// Centralized Color Configuration
+// すべてのGUI要素の色をここで一括管理
+struct UIColors
+{
+    // Knob colors by position (row, column)
+    struct KnobColors
+    {
+        juce::Colour outline;
+        juce::Colour indicator;
+        juce::Colour centerDot;
+        juce::Colour tickMarks;
+    };
+
+    // Row 1 knob colors
+    KnobColors position      { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (224, 224, 224) };  // Position
+    KnobColors density       { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (224, 224, 224) };  // Density
+    KnobColors size          { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (224, 224, 224) };  // Size
+    KnobColors texture       { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (224, 224, 224) };  // Texture
+    KnobColors pitch         { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Pitch
+
+    // Row 2 knob colors
+    KnobColors spread        { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Spread
+    KnobColors feedback      { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Feedback
+    KnobColors reverb        { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Reverb
+    KnobColors mix           { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Mix
+    KnobColors mode          { juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), juce::Colour (224, 224, 224) };  // Mode
+
+    // Row 3 knob colors
+    KnobColors trigRate      { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // TRIG Rate
+
+    // Button colors
+    juce::Colour buttonText              { 26, 26, 26 };
+    juce::Colour buttonBackground        { 250, 250, 250 };
+    juce::Colour buttonBackgroundPressed { 224, 224, 224 };
+    juce::Colour freezeTextOn            { 0xFFBAD64F };  // Freeze ON color
+    juce::Colour freezeTextOff           { 26, 26, 26 };
+
+    // Label colors
+    juce::Colour modeLabel { 52, 73, 94 };  // Ink blue
+    juce::Colour knobLabel { 102, 102, 102 };
+
+    // Background
+    juce::Colour background { 255, 255, 255 };
+};
+
+// Global color configuration instance
+static UIColors uiColors;
+
+//==============================================================================
 // E-Paper LookAndFeel for rotary knobs with tick marks
 class EPaperLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    UIColors::KnobColors* knobColors = nullptr;  // Pointer to current knob's colors
+
     EPaperLookAndFeel()
     {
         setColour (juce::Slider::thumbColourId, juce::Colour::fromRGB (26, 26, 26));
@@ -28,12 +79,18 @@ public:
         auto rw = radius * 2.0f;
         auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-        // Draw outer circle (outline) - lighter color to match text
-        g.setColour (juce::Colour::fromRGB (102, 102, 102));
+        // Get colors for this knob (use default if not set)
+        juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
+        juce::Colour indicatorColor = knobColors ? knobColors->indicator : juce::Colour (102, 102, 102);
+        juce::Colour centerDotColor = knobColors ? knobColors->centerDot : juce::Colour (102, 102, 102);
+        juce::Colour tickMarkColor = knobColors ? knobColors->tickMarks : juce::Colour (224, 224, 224);
+
+        // Draw outer circle (outline) - use knob-specific color
+        g.setColour (outlineColor);
         g.drawEllipse (rx, ry, rw, rw, 2.0f);
 
         // Draw tick marks
-        g.setColour (juce::Colour::fromRGB (224, 224, 224));
+        g.setColour (tickMarkColor);
         for (int i = 0; i < 5; ++i)
         {
             auto tickAngle = rotaryStartAngle + i * (rotaryEndAngle - rotaryStartAngle) / 4.0f;
@@ -48,11 +105,12 @@ public:
             g.drawLine (tickX1, tickY1, tickX2, tickY2, 2.0f);
         }
 
-        // Draw center dot - lighter color to match text
-        g.setColour (juce::Colour::fromRGB (102, 102, 102));
+        // Draw center dot - use knob-specific color
+        g.setColour (centerDotColor);
         g.fillEllipse (centreX - 3.0f, centreY - 3.0f, 6.0f, 6.0f);
 
-        // Draw indicator line - lighter color to match text
+        // Draw indicator line - use knob-specific color
+        g.setColour (indicatorColor);
         auto pointerLength = radius - 8.0f;
         auto pointerThickness = 3.0f;
         juce::Path p;
@@ -70,11 +128,11 @@ public:
         auto bounds = button.getLocalBounds().toFloat();
 
         // E-Paper button background
-        g.setColour (juce::Colour::fromRGB (250, 250, 250));
+        g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
 
         // E-Paper button border
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        g.setColour (uiColors.buttonText);
         g.drawRect (bounds, 2.0f);
     }
 
@@ -87,21 +145,21 @@ public:
 
         // Draw checkbox
         auto checkboxBounds = bounds.removeFromLeft (tickWidth).reduced (2.0f);
-        g.setColour (juce::Colour::fromRGB (250, 250, 250));
+        g.setColour (uiColors.buttonBackground);
         g.fillRect (checkboxBounds);
 
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        g.setColour (uiColors.buttonText);
         g.drawRect (checkboxBounds, 2.0f);
 
         if (button.getToggleState())
         {
             auto tick = checkboxBounds.reduced (4.0f);
-            g.setColour (juce::Colour::fromRGB (26, 26, 26));
+            g.setColour (uiColors.buttonText);
             g.fillRect (tick);
         }
 
-        // Draw text
-        g.setColour (juce::Colour::fromRGB (26, 26, 26));
+        // Draw text (color is set by component's textColourId, not here)
+        g.setColour (button.findColour (juce::ToggleButton::textColourId));
         g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
         g.drawText (button.getButtonText(), bounds.withTrimmedLeft (2.0f),
                    juce::Justification::centredLeft, true);
@@ -123,7 +181,20 @@ public:
 private:
     CloudLikeGranularProcessor& processor;
 
-    std::unique_ptr<EPaperLookAndFeel> ePaperLookAndFeel;  // Custom LookAndFeel for e-paper aesthetic (managed lifetime)
+    std::unique_ptr<EPaperLookAndFeel> ePaperLookAndFeel;  // Custom LookAndFeel for buttons (managed lifetime)
+
+    // Individual LookAndFeel instances for each knob (to support per-knob colors)
+    std::unique_ptr<EPaperLookAndFeel> positionLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> densityLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> sizeLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> textureLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> pitchLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> spreadLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> feedbackLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> reverbLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> mixLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> modeLookAndFeel;
+    std::unique_ptr<EPaperLookAndFeel> trigRateLookAndFeel;
 
     struct Knob
     {
@@ -157,7 +228,7 @@ private:
     std::unique_ptr<ButtonAttachment> trigModeAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
-    void setupKnob (Knob& k, const juce::String& name);
+    void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularEditor)
 };
