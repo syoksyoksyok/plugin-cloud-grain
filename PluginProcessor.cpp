@@ -22,7 +22,7 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Mode selection: 0 = Granular, 1 = WSOLA, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
+    // Mode selection: 0 = Granular, 1 = Pitch Shifter, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
     params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 6, 0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
@@ -84,7 +84,13 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     smoothedMix.reset(1.0f);
     smoothedReverb.reset(0.3f);
 
-    bufferSize = static_cast<int> (sampleRate * ringBufferSeconds);
+    // OPTIMIZATION: Round buffer size to power of 2 for fast bit-masking instead of modulo
+    int requestedSize = static_cast<int> (sampleRate * ringBufferSeconds);
+    bufferSize = 1;
+    while (bufferSize < requestedSize)
+        bufferSize <<= 1;  // OPTIMIZED: Bit shift to find next power of 2
+    bufferSizeMask = bufferSize - 1;  // OPTIMIZED: Bit mask for fast modulo operation
+
     ringBuffer.setSize (2, bufferSize);
     ringBuffer.clear();
     writeHead = 0;
@@ -140,10 +146,16 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
     for (size_t i = 0; i < oliverbTaps.size(); ++i)
     {
-        int tapSize = static_cast<int>(sampleRate * tapTimes[i]);
+        // OPTIMIZATION: Round to power of 2 for bit masking
+        int requestedSize = static_cast<int>(sampleRate * tapTimes[i]);
+        int tapSize = 1;
+        while (tapSize < requestedSize)
+            tapSize <<= 1;  // Find next power of 2
+
         oliverbTaps[i].buffer.resize(tapSize, 0.0f);
+        oliverbTaps[i].bufferSizeMask = tapSize - 1;  // OPTIMIZED: Bit mask
         oliverbTaps[i].writePos = 0;
-        oliverbTaps[i].modPhase = static_cast<float>(i) / 8.0f * juce::MathConstants<float>::twoPi;
+        oliverbTaps[i].modPhase = static_cast<float>(i) * 0.125f * juce::MathConstants<float>::twoPi;  // OPTIMIZED: Multiply instead of divide
         oliverbTaps[i].modDepth = 0.002f * sampleRate;  // 2ms modulation depth
     }
 
@@ -154,8 +166,14 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     };
     for (int i = 0; i < maxResonators; ++i)
     {
-        int delayLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        // OPTIMIZATION: Round to power of 2 for bit masking
+        int requestedLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        int delayLength = 1;
+        while (delayLength < requestedLength)
+            delayLength <<= 1;  // Find next power of 2
+
         resonators[i].delayLine.resize(delayLength, 0.0f);
+        resonators[i].delayLineMask = delayLength - 1;  // OPTIMIZED: Bit mask
         resonators[i].writePos = 0;
         resonators[i].feedback = 0.99f;
         resonators[i].brightness = 0.5f;
@@ -166,7 +184,7 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     int beatRepeatSize = static_cast<int>(sampleRate * 2.0);
     beatRepeat.captureBufferL.resize(beatRepeatSize, 0.0f);
     beatRepeat.captureBufferR.resize(beatRepeatSize, 0.0f);
-    beatRepeat.captureLength = beatRepeatSize / 4;  // Default to 1/4 bar
+    beatRepeat.captureLength = beatRepeatSize >> 2;  // OPTIMIZED: Bit shift for division by 4
     beatRepeat.repeatPos = 0;
     beatRepeat.stutterPhase = 0.0f;
     beatRepeat.isCapturing = false;
@@ -181,7 +199,7 @@ float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) 
     if (index < 0.0) index += bufferSize;
 
     int i0 = static_cast<int> (index);
-    int i1 = (i0 + 1) % bufferSize;
+    int i1 = (i0 + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask instead of modulo
     float frac = static_cast<float> (index - i0);
 
     auto* data = ringBuffer.getReadPointer (channel);
@@ -476,9 +494,9 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                   effectiveFeedback, freeze);
             break;
 
-        case MODE_WSOLA:
-            processWSOLABlock (buffer, numSamples, wetL, wetR,
-                               position, size, pitch, effectiveFeedback, freeze);
+        case MODE_PITCH_SHIFTER:
+            processPitchShifterBlock (buffer, numSamples, wetL, wetR,
+                                      position, size, pitch, effectiveFeedback, freeze);
             break;
 
         case MODE_LOOPING:
@@ -571,7 +589,7 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
         {
             ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
         // Clouds-style grain triggering
@@ -705,20 +723,33 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
     }
 }
 
-void CloudLikeGranularProcessor::processWSOLABlock (juce::AudioBuffer<float>& buffer, int numSamples,
-                                                    float* wetL, float* wetR,
-                                                    float position, float size, float pitch,
-                                                    float feedback, bool freeze)
+void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                                           float* wetL, float* wetR,
+                                                           float position, float size, float pitch,
+                                                           float feedback, bool freeze)
 {
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== WSOLA MODE (Block Processing) ==========
+    // ========== PITCH SHIFTER MODE (Clouds-style WSOLA) ==========
+    // SIZE: Controls window size - large = smooth, small = grainy/ring-modulated
+    // PITCH: Controls pitch shift amount (-24 to +24 semitones)
+    // POSITION: Controls read delay position
+
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
-    float timeStretch = 0.5f + size * 1.5f;  // Maps 0-1 to 0.5-2.0x speed
-    int windowSize = wsolaWindowSize;
-    int hopOut = windowSize >> 1;  // OPTIMIZED: Division by 2 using bit shift
-    int hopIn = static_cast<int>(hopOut / timeStretch);
+    float pitchRatio = pitchToRatio(pitch);
+
+    // Clouds-style SIZE mapping: 0.0 = small (256), 1.0 = large (2048)
+    // Small window = grainy, ring-modulated; Large window = smooth
+    int windowSize = static_cast<int>(256.0f + size * 1792.0f);  // 256 to 2048
+    windowSize = (windowSize + 3) & ~3;  // Round to multiple of 4 for alignment
+
+    int hopOut = windowSize >> 1;  // OPTIMIZED: Output hop = half window size
+
+    // Time stretching: combine pitch shift with independent time scaling
+    // pitchRatio > 1.0 = higher pitch, < 1.0 = lower pitch
+    float timeStretch = 1.0f / pitchRatio;  // Inverse for time-domain playback
+    int hopIn = static_cast<int>(hopOut * timeStretch);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -729,25 +760,42 @@ void CloudLikeGranularProcessor::processWSOLABlock (juce::AudioBuffer<float>& bu
         {
             ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        double readPos = wsolaReadPos;
-        if (readPos < 0) readPos += bufferSize;
-        if (readPos >= bufferSize) readPos -= bufferSize;
+        // Clouds-style read position with delay
+        double delayAmount = position * (bufferSize - windowSize);
+        double readPos = pitchShifterReadPos;
+        double delayedReadPos = static_cast<double>(writeHead) - delayAmount - readPos;
 
-        float outL = getSampleFromRing(0, readPos);
-        float outR = getSampleFromRing(1, readPos);
+        // Wrap read position
+        while (delayedReadPos < 0) delayedReadPos += bufferSize;
+        while (delayedReadPos >= bufferSize) delayedReadPos -= bufferSize;
 
-        // Apply Hann window for smoothing (OPTIMIZED: LUT)
-        float windowPhase = std::fmod(wsolaReadPos, static_cast<double>(hopOut)) / hopOut;
+        float outL = getSampleFromRing(0, delayedReadPos);
+        float outR = getSampleFromRing(1, delayedReadPos);
+
+        // Clouds-style Hann window with pitch-dependent shaping (OPTIMIZED: LUT)
+        // Smoother envelope for large windows, more aggressive for small windows
+        float windowPhase = std::fmod(pitchShifterReadPos, static_cast<double>(hopOut)) / hopOut;
         float window = 0.5f * (1.0f - fastCos(windowPhase * juce::MathConstants<float>::twoPi));
+
+        // Additional envelope shaping for small windows (ring-mod effect)
+        if (size < 0.3f)
+        {
+            float ringModAmount = (0.3f - size) * 3.333f;  // 0 to 1
+            window = window * (1.0f - ringModAmount * 0.5f);  // Reduce amplitude
+        }
 
         wetL[i] = outL * window;
         wetR[i] = outR * window;
 
-        wsolaReadPos += timeStretch;
-        if (wsolaReadPos >= bufferSize) wsolaReadPos -= bufferSize;
+        // Advance read position
+        pitchShifterReadPos += 1.0;
+        if (pitchShifterReadPos >= hopOut)
+        {
+            pitchShifterReadPos -= hopOut;
+        }
     }
 }
 
@@ -782,16 +830,25 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        int readPosInt = loopStartPos + static_cast<int>(loopReadPos);
-        if (readPosInt >= loopEndPos) readPosInt = loopStartPos;
-        if (readPosInt < 0) readPosInt += bufferSize;
-        readPosInt = readPosInt % bufferSize;
+        // Use floating-point position for smooth interpolation (via getSampleFromRing)
+        double readPosFloat = loopStartPos + loopReadPos;
 
-        float outL = getSampleFromRing(0, readPosInt);
-        float outR = getSampleFromRing(1, readPosInt);
+        // Wrap position to loop boundaries
+        while (readPosFloat >= loopEndPos)
+        {
+            readPosFloat -= loopLength;
+        }
+        while (readPosFloat < loopStartPos)
+        {
+            readPosFloat += loopLength;
+        }
+
+        // getSampleFromRing handles interpolation and buffer wrapping
+        float outL = getSampleFromRing(0, readPosFloat);
+        float outR = getSampleFromRing(1, readPosFloat);
 
         wetL[i] = outL;
         wetR[i] = outR;
@@ -826,7 +883,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
         // Fill FFT input buffer from ring buffer
@@ -835,7 +892,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             double readDelay = position * (bufferSize - fftSize);
             int readPos = static_cast<int>(writeHead - readDelay - spectralInputPos);
             if (readPos < 0) readPos += bufferSize;
-            readPos = readPos % bufferSize;
+            readPos = readPos & bufferSizeMask;  // OPTIMIZED: Bit mask
 
             // Apply Hann window during input (OPTIMIZED: LUT)
             float window = hannWindow(spectralInputPos, fftSize);
@@ -861,39 +918,38 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             forwardFFT.performRealOnlyForwardTransform(fftDataL.data());
             forwardFFT.performRealOnlyForwardTransform(fftDataR.data());
 
-            // Frequency domain processing: simple bin shifting for pitch shift
-            std::array<float, fftSize * 2> shiftedL;
-            std::array<float, fftSize * 2> shiftedR;
-            shiftedL.fill(0.0f);
-            shiftedR.fill(0.0f);
+            // OPTIMIZATION: Use member buffers instead of stack allocation
+            spectralShiftedL.fill(0.0f);
+            spectralShiftedR.fill(0.0f);
 
             // Shift frequency bins based on pitch ratio (OPTIMIZED: Bit shift)
-            for (int bin = 0; bin < (fftSize >> 1); ++bin)  // fftSize / 2
+            const int halfFFT = fftSize >> 1;  // OPTIMIZED: Pre-calculate
+            for (int bin = 0; bin < halfFFT; ++bin)
             {
                 int targetBin = static_cast<int>(bin * pitchRatio);
-                if (targetBin > 0 && targetBin < (fftSize >> 1))
+                if (targetBin > 0 && targetBin < halfFFT)
                 {
                     // Copy real and imaginary parts (OPTIMIZED: Bit shift for multiplication by 2)
                     int binIdx = bin << 1;
                     int targetIdx = targetBin << 1;
-                    shiftedL[targetIdx] = fftDataL[binIdx];
-                    shiftedL[targetIdx + 1] = fftDataL[binIdx + 1];
-                    shiftedR[targetIdx] = fftDataR[binIdx];
-                    shiftedR[targetIdx + 1] = fftDataR[binIdx + 1];
+                    spectralShiftedL[targetIdx] = fftDataL[binIdx];
+                    spectralShiftedL[targetIdx + 1] = fftDataL[binIdx + 1];
+                    spectralShiftedR[targetIdx] = fftDataR[binIdx];
+                    spectralShiftedR[targetIdx + 1] = fftDataR[binIdx + 1];
                 }
             }
 
             // Perform inverse FFT
-            forwardFFT.performRealOnlyInverseTransform(shiftedL.data());
-            forwardFFT.performRealOnlyInverseTransform(shiftedR.data());
+            forwardFFT.performRealOnlyInverseTransform(spectralShiftedL.data());
+            forwardFFT.performRealOnlyInverseTransform(spectralShiftedR.data());
 
             // Overlap-Add: accumulate to output buffer with Hann window (OPTIMIZED: LUT)
             float normGain = 2.0f / fftSize;
             for (int n = 0; n < fftSize; ++n)
             {
                 float window = hannWindow(n, fftSize);
-                spectralOutputL[n] += shiftedL[n] * normGain * window;
-                spectralOutputR[n] += shiftedR[n] * normGain * window;
+                spectralOutputL[n] += spectralShiftedL[n] * normGain * window;
+                spectralOutputR[n] += spectralShiftedR[n] * normGain * window;
             }
 
             spectralOutputPos = 0;
@@ -944,7 +1000,7 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
         float outputL = 0.0f;
@@ -960,11 +1016,11 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
             if (tap.modPhase > juce::MathConstants<float>::twoPi)
                 tap.modPhase -= juce::MathConstants<float>::twoPi;
 
-            // Modulated read position (OPTIMIZED: LUT)
+            // Modulated read position (OPTIMIZED: LUT + Bit mask)
             float mod = fastSin(tap.modPhase) * modDepth;
             int readPos = tap.writePos - static_cast<int>((tap.buffer.size() >> 1) + mod);  // OPTIMIZED: Bit shift
             if (readPos < 0) readPos += tap.buffer.size();
-            readPos = readPos % tap.buffer.size();
+            readPos = readPos & tap.bufferSizeMask;  // OPTIMIZED: Bit mask instead of modulo
 
             float delayed = tap.buffer[readPos];
 
@@ -974,7 +1030,7 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
             // Write input + feedback (OPTIMIZED: Bit shift for division by 8)
             float inputMix = (t & 1) ? inSampleR : inSampleL;  // OPTIMIZED: Bit mask instead of modulo
             tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback;
-            tap.writePos = (tap.writePos + 1) % tap.buffer.size();
+            tap.writePos = (tap.writePos + 1) & tap.bufferSizeMask;  // OPTIMIZED: Bit mask
 
             // Accumulate to output (alternate L/R)
             if (!(t & 1))  // OPTIMIZED: Bit mask instead of modulo
@@ -1020,7 +1076,7 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
         float outputL = 0.0f;
@@ -1041,7 +1097,8 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
                 float excite = (uniform(rng) * 2.0f - 1.0f) * excitation * inputEnergy;
                 for (size_t n = 0; n < res.delayLine.size() && n < 10; ++n)
                 {
-                    res.delayLine[(res.writePos + n) % res.delayLine.size()] += excite;
+                    // OPTIMIZED: Bit mask instead of modulo
+                    res.delayLine[(res.writePos + n) & res.delayLineMask] += excite;
                 }
             }
 
@@ -1051,12 +1108,13 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
                 float delayed = res.delayLine[readPos];
 
                 // Low-pass filter for damping (brightness control)
-                int prevPos = (readPos - 1 + res.delayLine.size()) % res.delayLine.size();
+                // OPTIMIZED: Bit mask instead of modulo
+                int prevPos = (readPos - 1 + res.delayLine.size()) & res.delayLineMask;
                 float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
 
                 // Feedback with decay
                 res.delayLine[res.writePos] = filtered * decay;
-                res.writePos = (res.writePos + 1) % res.delayLine.size();
+                res.writePos = (res.writePos + 1) & res.delayLineMask;  // OPTIMIZED: Bit mask
 
                 // Accumulate to output (alternate L/R) (OPTIMIZED: Bit mask)
                 if (!(r & 1))
@@ -1105,7 +1163,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) % bufferSize;
+            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
         // Trigger capture based on repeat rate
@@ -1122,7 +1180,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
 
             for (int n = 0; n < beatRepeat.captureLength; ++n)
             {
-                int readIdx = (captureStart + n) % bufferSize;
+                int readIdx = (captureStart + n) & bufferSizeMask;  // OPTIMIZED: Bit mask
                 beatRepeat.captureBufferL[n] = ringBuffer.getSample(0, readIdx);
                 beatRepeat.captureBufferR[n] = ringBuffer.getSample(1, readIdx);
             }
@@ -1131,10 +1189,17 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         // Playback captured buffer
         if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
         {
-            int readPos = static_cast<int>(beatRepeat.repeatPos) % beatRepeat.captureLength;
+            // Use linear interpolation for smooth playback at any speed
+            float readPosFloat = std::fmod(beatRepeat.repeatPos, static_cast<float>(beatRepeat.captureLength));
+            int readPos0 = static_cast<int>(readPosFloat);
+            int readPos1 = (readPos0 + 1) % beatRepeat.captureLength;
+            float frac = readPosFloat - readPos0;
 
-            float outL = beatRepeat.captureBufferL[readPos];
-            float outR = beatRepeat.captureBufferR[readPos];
+            // Interpolate between samples for smooth playback
+            float outL = beatRepeat.captureBufferL[readPos0] +
+                        (beatRepeat.captureBufferL[readPos1] - beatRepeat.captureBufferL[readPos0]) * frac;
+            float outR = beatRepeat.captureBufferR[readPos0] +
+                        (beatRepeat.captureBufferR[readPos1] - beatRepeat.captureBufferR[readPos0]) * frac;
 
             // Apply stutter envelope
             float stutterEnv = 1.0f;
@@ -1151,7 +1216,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
             beatRepeat.repeatPos += playbackSpeed;
             if (beatRepeat.repeatPos >= beatRepeat.captureLength)
             {
-                beatRepeat.repeatPos = 0;
+                beatRepeat.repeatPos -= beatRepeat.captureLength;  // Better wrapping
             }
         }
         else

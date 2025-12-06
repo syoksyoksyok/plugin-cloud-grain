@@ -109,10 +109,10 @@ void CloudLikeGranularEditor::timerCallback()
             textureLabel = "Texture";
             break;
 
-        case 1: // WSOLA
-            modeText = "MODE: WSOLA";
+        case 1: // Pitch Shifter (Clouds-style)
+            modeText = "MODE: Pitch Shifter";
             posLabel = "Position";
-            sizeLabel = "Stretch";
+            sizeLabel = "Window";  // Small=Grainy, Large=Smooth
             pitchLabel = "Pitch";
             densityLabel = "Density";
             textureLabel = "Texture";

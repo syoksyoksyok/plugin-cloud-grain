@@ -76,12 +76,12 @@ private:
     enum ProcessingMode
     {
         MODE_GRANULAR = 0,
-        MODE_WSOLA = 1,
+        MODE_PITCH_SHIFTER = 1,  // Clouds: WSOLA-based pitch shifter/time stretcher
         MODE_LOOPING = 2,
         MODE_SPECTRAL = 3,
-        MODE_OLIVERB = 4,      // Parasites: Creative reverb mode
-        MODE_RESONESTOR = 5,   // Parasites: Polyphonic resonator (Karplus-Strong)
-        MODE_BEAT_REPEAT = 6   // Parasites: Beat repeat/stutter effect
+        MODE_OLIVERB = 4,        // Parasites: Creative reverb mode
+        MODE_RESONESTOR = 5,     // Parasites: Polyphonic resonator (Karplus-Strong)
+        MODE_BEAT_REPEAT = 6     // Parasites: Beat repeat/stutter effect
     };
 
     // Correlator for pitch detection and grain alignment (Clouds-style)
@@ -186,10 +186,11 @@ private:
     static constexpr int HANN_WINDOW_SIZE = 2048;
     static constexpr int PITCH_LUT_SIZE = 49;  // -24 to +24 semitones
 
-    std::array<float, SINE_TABLE_SIZE> sineLUT;
-    std::array<float, SINE_TABLE_SIZE> cosineLUT;
-    std::array<float, HANN_WINDOW_SIZE> hannWindowLUT;
-    std::array<float, PITCH_LUT_SIZE> pitchRatioLUT;
+    // OPTIMIZATION: Memory alignment for SIMD (32-byte for AVX)
+    alignas(32) std::array<float, SINE_TABLE_SIZE> sineLUT;
+    alignas(32) std::array<float, SINE_TABLE_SIZE> cosineLUT;
+    alignas(32) std::array<float, HANN_WINDOW_SIZE> hannWindowLUT;
+    alignas(32) std::array<float, PITCH_LUT_SIZE> pitchRatioLUT;
 
     // Fast LUT access helpers
     inline float fastSin(float phase) const {
@@ -262,6 +263,7 @@ private:
 
     juce::AudioBuffer<float> ringBuffer;
     int    bufferSize = 0;
+    int    bufferSizeMask = 0;  // OPTIMIZATION: Bit mask for fast modulo (bufferSize - 1)
     int    writeHead = 0;
     double currentSampleRate = 44100.0;
 
@@ -281,10 +283,10 @@ private:
     int detectedPeriod = 0;
     int correlatorUpdateCounter = 0;
 
-    // WSOLA state
-    double wsolaReadPos = 0.0;
-    int wsolaWindowSize = 2048;
-    int wsolaSearchWindow = 512;
+    // Pitch Shifter state (WSOLA-based)
+    double pitchShifterReadPos = 0.0;
+    int pitchShifterWindowSize = 2048;
+    int pitchShifterSearchWindow = 512;
 
     // Looping mode state
     double loopReadPos = 0.0;
@@ -296,18 +298,23 @@ private:
     static constexpr int fftOrder = 11;
     static constexpr int fftSize = 1 << fftOrder;  // 2048
     juce::dsp::FFT forwardFFT { fftOrder };
-    std::array<float, fftSize * 2> fftDataL;
-    std::array<float, fftSize * 2> fftDataR;
+    alignas(32) std::array<float, fftSize * 2> fftDataL;
+    alignas(32) std::array<float, fftSize * 2> fftDataR;
     int spectralInputPos = 0;      // Input accumulation position
     int spectralOutputPos = 0;     // Output read position
-    std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
-    std::array<float, fftSize * 2> spectralOutputR;
+    alignas(32) std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
+    alignas(32) std::array<float, fftSize * 2> spectralOutputR;
+
+    // OPTIMIZATION: Reusable buffers for spectral processing (avoid stack allocation)
+    alignas(32) std::array<float, fftSize * 2> spectralShiftedL;
+    alignas(32) std::array<float, fftSize * 2> spectralShiftedR;
 
     // Oliverb mode state (Multi-tap reverb with modulation)
     struct OliverbTap
     {
         std::vector<float> buffer;
         int writePos = 0;
+        int bufferSizeMask = 0;  // OPTIMIZATION: Bit mask for power-of-2 buffer
         float modPhase = 0.0f;
         float modDepth = 0.0f;
     };
@@ -319,6 +326,7 @@ private:
     {
         std::vector<float> delayLine;
         int writePos = 0;
+        int delayLineMask = 0;  // OPTIMIZATION: Bit mask for power-of-2 delay line
         float feedback = 0.0f;
         float brightness = 0.5f;
         bool active = false;
@@ -356,7 +364,7 @@ private:
     float fastInverseSqrt (float number) const;
     float computeOverlap (float density) const;
 
-    // WSOLA helper: find best matching segment
+    // Pitch Shifter (WSOLA) helper: find best matching segment
     int findBestMatch (const float* reference, const float* searchBuffer,
                        int searchLength, int windowSize);
 
@@ -369,10 +377,10 @@ private:
                                float position, float size, float pitch, float density,
                                float texture, float spread, float feedback, bool freeze);
 
-    void processWSOLABlock (juce::AudioBuffer<float>& buffer, int numSamples,
-                            float* wetL, float* wetR,
-                            float position, float size, float pitch,
-                            float feedback, bool freeze);
+    void processPitchShifterBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                   float* wetL, float* wetR,
+                                   float position, float size, float pitch,
+                                   float feedback, bool freeze);
 
     void processLoopingBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                               float* wetL, float* wetR,
