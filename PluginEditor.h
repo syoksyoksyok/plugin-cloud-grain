@@ -77,6 +77,7 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
+        // Standard rotation: min value at rotaryStartAngle, max value at rotaryEndAngle
         auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
