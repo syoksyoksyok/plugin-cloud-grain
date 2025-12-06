@@ -10,7 +10,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
 
     setupKnob (modeKnob, "Mode");
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
+    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
     modeKnob.slider.setNumDecimalPlacesToDisplay(0);  // Display integers only
 
     setupKnob (positionKnob, "Position");
@@ -28,7 +28,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (modeLabel);
 
     // Style mode label (E-Paper: ink blue for accent)
-    modeLabel.setFont (juce::Font ("Courier New", 13.0f, juce::Font::bold));
+    modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
     modeLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (52, 73, 94));  // Ink blue
     modeLabel.setJustificationType (juce::Justification::centred);
 
@@ -218,7 +218,7 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     addAndMakeVisible (k.label);
 
     k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
+    k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
     k.slider.setPopupDisplayEnabled (true, false, this);
 
     // Apply E-Paper LookAndFeel
@@ -233,7 +233,7 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name)
     k.label.attachToComponent (&k.slider, false);
     k.label.setJustificationType (juce::Justification::centred);
     k.label.setColour (juce::Label::textColourId, juce::Colour::fromRGB (26, 26, 26));
-    k.label.setFont (juce::Font ("Courier New", 10.0f, juce::Font::plain));
+    k.label.setFont (juce::Font ("Courier New", 12.0f, juce::Font::plain));
 }
 
 void CloudLikeGranularEditor::paint (juce::Graphics& g)
@@ -291,7 +291,8 @@ void CloudLikeGranularEditor::resized()
 
     auto placeKnob = [] (Knob& k, juce::Rectangle<int> r)
     {
-        k.slider.setBounds (r.reduced (8));
+        // Reduce knob size to half by increasing margin
+        k.slider.setBounds (r.reduced (25));
     };
 
     // Row 1: Position, Size, Pitch, Density, Texture
