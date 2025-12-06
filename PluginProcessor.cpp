@@ -448,6 +448,46 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // Get processing mode
     int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
 
+    // Clear buffers when mode changes to prevent clicks/pops
+    int prevMode = previousMode.load();
+    if (mode != prevMode)
+    {
+        previousMode.store(mode);
+
+        // Clear Resonestor delay lines when switching away from or to Resonestor mode
+        if (prevMode == MODE_RESONESTOR || mode == MODE_RESONESTOR)
+        {
+            for (auto& res : resonators)
+            {
+                std::fill(res.delayLine.begin(), res.delayLine.end(), 0.0f);
+                res.writePos = 0;
+                res.active = false;
+            }
+        }
+
+        // Clear Oliverb taps when switching away from or to Oliverb mode
+        if (prevMode == MODE_OLIVERB || mode == MODE_OLIVERB)
+        {
+            for (auto& tap : oliverbTaps)
+            {
+                std::fill(tap.buffer.begin(), tap.buffer.end(), 0.0f);
+                tap.writePos = 0;
+                tap.modPhase = 0.0f;
+            }
+        }
+
+        // Clear spectral buffers when switching away from or to Spectral mode
+        if (prevMode == MODE_SPECTRAL || mode == MODE_SPECTRAL)
+        {
+            spectralOutputL.fill(0.0f);
+            spectralOutputR.fill(0.0f);
+            fftDataL.fill(0.0f);
+            fftDataR.fill(0.0f);
+            spectralInputPos = 0;
+            spectralOutputPos = 0;
+        }
+    }
+
     // Run correlation analysis periodically (every 256 samples) for pitch detection
     int currentCounter = correlatorUpdateCounter.load();
     currentCounter += numSamples;
@@ -1083,11 +1123,14 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
     // OPTIMIZATION: Calculate parameters once per block
     float excitation = position;
     float decayTime = size;
-    float pitchShift = pitch;
+    float pitchShift = pitch;  // -24 to +24 semitones
     float activationThreshold = 1.0f - density;
     float brightness = texture;
     float decay = 0.9f + decayTime * 0.099f;  // 0.9 to 0.999
     float damping = 0.5f + brightness * 0.5f;  // 0.5 to 1.0
+
+    // Convert pitch shift to playback rate (same as pitch ratio calculation)
+    float pitchRatio = pitchToRatio(pitchShift);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -1103,6 +1146,7 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
 
         float outputL = 0.0f;
         float outputR = 0.0f;
+        int activeCount = 0;
 
         // Excite resonators based on input energy
         float inputEnergy = std::abs(inSampleL) + std::abs(inSampleR);
@@ -1126,7 +1170,12 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
 
             if (res.active)
             {
-                int readPos = res.writePos;
+                activeCount++;
+
+                // Apply pitch shift by modulating read position
+                // pitchRatio > 1.0 = higher pitch (shorter delay), < 1.0 = lower pitch (longer delay)
+                float pitchOffset = (1.0f - pitchRatio) * res.delayLine.size() * 0.5f;
+                int readPos = static_cast<int>(res.writePos + pitchOffset) & res.delayLineMask;
                 float delayed = res.delayLine[readPos];
 
                 // Low-pass filter for damping (brightness control)
@@ -1150,8 +1199,16 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             }
         }
 
-        wetL[i] = outputL * 0.15f;
-        wetR[i] = outputR * 0.15f;
+        // Normalize by number of active resonators to prevent loudness buildup
+        float gain = 0.1f;  // Base gain reduced from 0.15f
+        if (activeCount > 0)
+        {
+            // Normalize by active count with gentle scaling
+            gain *= fastInverseSqrt(static_cast<float>(activeCount) * 0.5f + 1.0f);
+        }
+
+        wetL[i] = outputL * gain;
+        wetR[i] = outputR * gain;
     }
 }
 

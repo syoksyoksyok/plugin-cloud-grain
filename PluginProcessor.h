@@ -346,6 +346,7 @@ private:
     BeatRepeatState beatRepeat;
 
     std::atomic<float> lastRandomizeValue { 0.0f };
+    std::atomic<int> previousMode { 0 };  // Track mode changes for cleanup
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
