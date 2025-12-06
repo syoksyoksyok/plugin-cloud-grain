@@ -77,7 +77,8 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
-        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+        // Reverse rotation direction to fix inversion
+        auto angle = rotaryStartAngle + (1.0f - sliderPos) * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
         juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
@@ -89,11 +90,12 @@ public:
         g.setColour (outlineColor);
         g.drawEllipse (rx, ry, rw, rw, 2.0f);
 
-        // Draw tick marks
+        // Draw tick marks (reversed to match knob rotation)
         g.setColour (tickMarkColor);
         for (int i = 0; i < 5; ++i)
         {
-            auto tickAngle = rotaryStartAngle + i * (rotaryEndAngle - rotaryStartAngle) / 4.0f;
+            // Reverse tick mark order to match reversed rotation
+            auto tickAngle = rotaryStartAngle + (1.0f - i / 4.0f) * (rotaryEndAngle - rotaryStartAngle);
             auto tickRadius = radius - 2.0f;
             auto tickLength = 6.0f;
 
