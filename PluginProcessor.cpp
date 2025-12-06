@@ -455,6 +455,34 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // Process MIDI for TRIG input (Manual mode)
     bool trigMode = apvts.getRawParameterValue ("trigMode")->load() > 0.5f;  // false = Manual/MIDI, true = Auto
 
+    // Base tempo LED: Always blink at ×1 quarter note from DAW (both Manual and Auto modes)
+    auto playHead = getPlayHead();
+    if (playHead != nullptr)
+    {
+        juce::Optional<juce::AudioPlayHead::PositionInfo> posInfo = playHead->getPosition();
+        if (posInfo.hasValue() && posInfo->getBpm().hasValue())
+        {
+            double bpm = *posInfo->getBpm();
+
+            // Calculate base tempo LED phase (always ×1 quarter note)
+            double baseNoteValue = 1.0 / 4.0;  // Quarter note
+            double beatsPerSecond = bpm / 60.0;
+            double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
+            double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
+
+            // Base tempo LED (always active in both modes)
+            for (int i = 0; i < numSamples; ++i)
+            {
+                baseTempoPhase += basePhaseIncrement;
+                if (baseTempoPhase >= 1.0)
+                {
+                    baseTempoPhase -= 1.0;
+                    baseTempoBlink.store(true);  // LED 1: Blink at base tempo
+                }
+            }
+        }
+    }
+
     if (!trigMode)  // Manual/MIDI mode
     {
         bool currentMidiNoteState = false;
@@ -472,6 +500,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 if (currentMidiNoteState != lastMidiNoteState)
                 {
                     triggerReceived.store(true);
+                    trigRateBlink.store(true);  // LED 2: Blink on MIDI trigger in Manual mode
                     lastMidiNoteState = currentMidiNoteState;
                 }
             }
@@ -513,29 +542,15 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 double triggersPerSecond = beatsPerSecond / noteValue;
                 double phaseIncrement = triggersPerSecond / currentSampleRate;
 
-                // Calculate base tempo LED phase (always ×1 quarter note)
-                double baseNoteValue = 1.0 / 4.0;  // Quarter note
-                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
-                double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
-
-                // Accumulate phase and generate triggers
+                // Accumulate phase and generate triggers (TRIG RATE tempo sync)
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    // TRIG RATE tempo sync (with rate divisions/multiplications)
                     tempoSyncPhase += phaseIncrement;
                     if (tempoSyncPhase >= 1.0)
                     {
                         tempoSyncPhase -= 1.0;
                         triggerReceived.store(true);
                         trigRateBlink.store(true);  // LED 2: Blink at TRIG RATE tempo
-                    }
-
-                    // Base tempo LED (always ×1 quarter note)
-                    baseTempoPhase += basePhaseIncrement;
-                    if (baseTempoPhase >= 1.0)
-                    {
-                        baseTempoPhase -= 1.0;
-                        baseTempoBlink.store(true);  // LED 1: Blink at base tempo
                     }
                 }
             }
