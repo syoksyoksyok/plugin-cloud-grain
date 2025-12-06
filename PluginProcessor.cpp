@@ -39,6 +39,14 @@ CloudLikeGranularProcessor::createParameterLayout()
     params.push_back (std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 0.95f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("mix",      "Mix",      0.0f, 1.0f, 1.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("reverb",   "Reverb",   0.0f, 1.0f, 0.3f));
+
+    // TRIG parameters
+    // trigMode: false = Manual (MIDI), true = Auto (Tempo Sync)
+    params.push_back (std::make_unique<juce::AudioParameterBool>("trigMode",  "Trig Mode", false));
+    // trigRate: Center (0) = 1/4 note, Left (-) = divisions, Right (+) = multiplications
+    // Range: -4.0 (1/16) to +4.0 (4 bars), with triplet support
+    params.push_back (std::make_unique<juce::AudioParameterFloat>("trigRate", "Trig Rate", -4.0f, 4.0f, 0.0f));
+
     params.push_back (std::make_unique<juce::AudioParameterBool>("freeze",   "Freeze",   false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("randomize","Randomize",false));
 
