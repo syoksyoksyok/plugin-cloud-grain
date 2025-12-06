@@ -352,10 +352,8 @@ void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPap
     k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
     k.slider.setPopupDisplayEnabled (true, false, this);
 
-    // Try negated angles to fix coordinate system flip
-    k.slider.setRotaryParameters (-juce::MathConstants<float>::pi * 1.2f,  // Negated start angle
-                                   -juce::MathConstants<float>::pi * 2.8f,  // Negated end angle
-                                   true);                                   // Stop at end
+    // Use JUCE default rotary parameters (no explicit setRotaryParameters call)
+    // This should give standard knob behavior: left-bottom = min, right-bottom = max
 
     // Apply E-Paper LookAndFeel (with per-knob colors)
     k.slider.setLookAndFeel (lookAndFeel);

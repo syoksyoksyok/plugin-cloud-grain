@@ -77,8 +77,8 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
-        // Reverse angle calculation to fix rotation direction
-        auto angle = rotaryStartAngle + (1.0f - sliderPos) * (rotaryEndAngle - rotaryStartAngle);
+        // Use standard JUCE rotation calculation
+        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
         juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
