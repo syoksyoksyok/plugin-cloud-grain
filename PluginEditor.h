@@ -77,8 +77,9 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
-        // Standard rotation: min value at rotaryStartAngle, max value at rotaryEndAngle
-        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+        // Reversed rotation to fix up/down/left/right inversion
+        // Combined with swapped rotary parameters: Left-bottom = min, Right-bottom = max
+        auto angle = rotaryStartAngle + (1.0f - sliderPos) * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
         juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
