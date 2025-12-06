@@ -470,16 +470,19 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 float trigRate = apvts.getRawParameterValue ("trigRate")->load();
 
                 // Calculate note value based on TRIG RATE parameter
+                // Updated with more triplet patterns: 1/16, 1/16T, 1/8, 1/8T, 1/4, 1/4T, 1/2, 1/2T, 1bar, 1barT, 2bars
                 double noteValue = 0.25;  // Quarter note base
 
-                if (trigRate < -3.5f)      noteValue = 1.0 / 16.0;  // 1/16 note
-                else if (trigRate < -2.5f) noteValue = 1.0 / 12.0;  // 1/16 triplet
-                else if (trigRate < -1.5f) noteValue = 1.0 / 8.0;   // 1/8 note
-                else if (trigRate < -0.5f) noteValue = 1.0 / 6.0;   // 1/8 triplet
-                else if (trigRate < 0.5f)  noteValue = 1.0 / 4.0;   // 1/4 note
-                else if (trigRate < 1.5f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
-                else if (trigRate < 2.5f)  noteValue = 1.0 / 2.0;   // 1/2 note
-                else if (trigRate < 3.5f)  noteValue = 1.0;         // 1 bar
+                if (trigRate < -3.4f)      noteValue = 1.0 / 16.0;  // 1/16 note
+                else if (trigRate < -2.8f) noteValue = 1.0 / 12.0;  // 1/16 triplet
+                else if (trigRate < -2.2f) noteValue = 1.0 / 8.0;   // 1/8 note
+                else if (trigRate < -1.6f) noteValue = 1.0 / 6.0;   // 1/8 triplet
+                else if (trigRate < -0.8f) noteValue = 1.0 / 4.0;   // 1/4 note
+                else if (trigRate < 0.0f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
+                else if (trigRate < 0.8f)  noteValue = 1.0 / 2.0;   // 1/2 note
+                else if (trigRate < 1.6f)  noteValue = 1.0 / 1.5;   // 1/2 triplet (NEW)
+                else if (trigRate < 2.4f)  noteValue = 1.0;         // 1 bar
+                else if (trigRate < 3.2f)  noteValue = 4.0 / 3.0;   // 1 bar triplet (NEW)
                 else                       noteValue = 2.0;         // 2 bars
 
                 double beatsPerSecond = bpm / 60.0;
@@ -539,18 +542,20 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 // Center (0) = 1/4 note
                 // Negative = divisions (1/8, 1/16, etc.)
                 // Positive = multiplications (1/2, 1 bar, 2 bars, etc.)
-                // Support triplets at certain values
+                // Updated with more triplet patterns: 1/16, 1/16T, 1/8, 1/8T, 1/4, 1/4T, 1/2, 1/2T, 1bar, 1barT, 2bars
 
                 double noteValue = 0.25;  // Quarter note base
 
-                if (trigRate < -3.5f)      noteValue = 1.0 / 16.0;  // 1/16 note
-                else if (trigRate < -2.5f) noteValue = 1.0 / 12.0;  // 1/16 triplet
-                else if (trigRate < -1.5f) noteValue = 1.0 / 8.0;   // 1/8 note
-                else if (trigRate < -0.5f) noteValue = 1.0 / 6.0;   // 1/8 triplet
-                else if (trigRate < 0.5f)  noteValue = 1.0 / 4.0;   // 1/4 note
-                else if (trigRate < 1.5f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
-                else if (trigRate < 2.5f)  noteValue = 1.0 / 2.0;   // 1/2 note
-                else if (trigRate < 3.5f)  noteValue = 1.0;         // 1 bar
+                if (trigRate < -3.4f)      noteValue = 1.0 / 16.0;  // 1/16 note
+                else if (trigRate < -2.8f) noteValue = 1.0 / 12.0;  // 1/16 triplet
+                else if (trigRate < -2.2f) noteValue = 1.0 / 8.0;   // 1/8 note
+                else if (trigRate < -1.6f) noteValue = 1.0 / 6.0;   // 1/8 triplet
+                else if (trigRate < -0.8f) noteValue = 1.0 / 4.0;   // 1/4 note
+                else if (trigRate < 0.0f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
+                else if (trigRate < 0.8f)  noteValue = 1.0 / 2.0;   // 1/2 note
+                else if (trigRate < 1.6f)  noteValue = 1.0 / 1.5;   // 1/2 triplet (NEW)
+                else if (trigRate < 2.4f)  noteValue = 1.0;         // 1 bar
+                else if (trigRate < 3.2f)  noteValue = 4.0 / 3.0;   // 1 bar triplet (NEW)
                 else                       noteValue = 2.0;         // 2 bars
 
                 // Calculate frequency: triggers per second
