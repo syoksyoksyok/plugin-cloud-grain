@@ -354,6 +354,11 @@ private:
     bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
 
+    // LED indicators for tempo visualization
+    std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo (×1, quarter note)
+    std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo
+    double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED (always ×1)
+
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
     std::atomic<int> numActiveGrains { 0 };

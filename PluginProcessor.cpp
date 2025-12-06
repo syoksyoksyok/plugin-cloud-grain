@@ -513,14 +513,29 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 double triggersPerSecond = beatsPerSecond / noteValue;
                 double phaseIncrement = triggersPerSecond / currentSampleRate;
 
+                // Calculate base tempo LED phase (always ×1 quarter note)
+                double baseNoteValue = 1.0 / 4.0;  // Quarter note
+                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
+                double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
+
                 // Accumulate phase and generate triggers
                 for (int i = 0; i < numSamples; ++i)
                 {
+                    // TRIG RATE tempo sync (with rate divisions/multiplications)
                     tempoSyncPhase += phaseIncrement;
                     if (tempoSyncPhase >= 1.0)
                     {
                         tempoSyncPhase -= 1.0;
                         triggerReceived.store(true);
+                        trigRateBlink.store(true);  // LED 2: Blink at TRIG RATE tempo
+                    }
+
+                    // Base tempo LED (always ×1 quarter note)
+                    baseTempoPhase += basePhaseIncrement;
+                    if (baseTempoPhase >= 1.0)
+                    {
+                        baseTempoPhase -= 1.0;
+                        baseTempoBlink.store(true);  // LED 1: Blink at base tempo
                     }
                 }
             }
