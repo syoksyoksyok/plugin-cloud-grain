@@ -1526,18 +1526,18 @@ void CloudLikeGranularProcessor::randomizeParameters()
         }
     };
 
-    // Randomize all parameters (except freeze and mode)
+    // Randomize all parameters (except freeze, mode, spread, and mix)
     setNormalized ("position");
     setNormalized ("size");
     setNormalized ("pitch");      // Now correctly randomizes full -24 to +24 range
     setNormalized ("density");
     setNormalized ("texture");
-    setNormalized ("spread");
+    // setNormalized ("spread");  // Excluded from randomization
     setNormalized ("feedback");
     setNormalized ("reverb");
-    setNormalized ("mix");
+    // setNormalized ("mix");     // Excluded from randomization
 
-    // Note: Freeze and Mode are excluded from randomization
+    // Note: Freeze, Mode, Spread, and Mix are excluded from randomization
 }
 
 juce::AudioProcessorEditor* CloudLikeGranularProcessor::createEditor()
