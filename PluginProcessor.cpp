@@ -445,13 +445,40 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                                juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
-    midi.clear();
 
     auto numSamples = buffer.getNumSamples();
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
+
+    // Process MIDI for TRIG input (Manual mode)
+    bool trigMode = apvts.getRawParameterValue ("trigMode")->load() > 0.5f;  // false = Manual/MIDI, true = Auto
+
+    if (!trigMode)  // Manual/MIDI mode
+    {
+        bool currentMidiNoteState = false;
+
+        for (const auto metadata : midi)
+        {
+            auto message = metadata.getMessage();
+
+            // Trigger on both note on and note off
+            if (message.isNoteOn() || message.isNoteOff())
+            {
+                currentMidiNoteState = message.isNoteOn();
+
+                // Edge detection: trigger on state change
+                if (currentMidiNoteState != lastMidiNoteState)
+                {
+                    triggerReceived.store(true);
+                    lastMidiNoteState = currentMidiNoteState;
+                }
+            }
+        }
+    }
+
+    midi.clear();  // Clear MIDI output (we don't produce MIDI)
 
     // Get processing mode
     int mode = static_cast<int>(apvts.getRawParameterValue ("mode")->load());
@@ -661,25 +688,38 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        // Clouds-style grain triggering
-        bool triggerGrain = false;
-
-        if (useDeterministic)
+        // TRIG input: Force grain generation (Clouds TRIG behavior)
+        // When TRIG is received, generate 1 grain based on POSITION/SIZE, bypassing density
+        bool manualTrigger = false;
+        if (i == 0 && triggerReceived.load())  // Check trigger at start of block
         {
-            // Deterministic mode: evenly spaced grains
-            grainRatePhasor += grainRate / (float) currentSampleRate * 100.0f;
-            if (grainRatePhasor >= 1.0f)
-            {
-                grainRatePhasor -= 1.0f;
-                triggerGrain = true;
-            }
+            manualTrigger = true;
+            triggerReceived.store(false);  // Clear trigger flag
         }
-        else
+
+        // Clouds-style grain triggering (automatic, based on density)
+        bool triggerGrain = manualTrigger;  // Manual TRIG always triggers
+
+        // Only use density-based triggering if no manual trigger
+        if (!manualTrigger)
         {
-            // Probabilistic mode: random triggering
-            float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
-            float prob = grainsPerSecond / (float) currentSampleRate;
-            triggerGrain = (uniform (rng) < prob);
+            if (useDeterministic)
+            {
+                // Deterministic mode: evenly spaced grains
+                grainRatePhasor += grainRate / (float) currentSampleRate * 100.0f;
+                if (grainRatePhasor >= 1.0f)
+                {
+                    grainRatePhasor -= 1.0f;
+                    triggerGrain = true;
+                }
+            }
+            else
+            {
+                // Probabilistic mode: random triggering
+                float grainsPerSecond = minGrainsPerSecond + density * (maxGrainsPerSecond - minGrainsPerSecond);
+                float prob = grainsPerSecond / (float) currentSampleRate;
+                triggerGrain = (uniform (rng) < prob);
+            }
         }
 
         if (triggerGrain)
