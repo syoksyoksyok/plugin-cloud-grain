@@ -314,6 +314,7 @@ private:
     {
         std::vector<float> buffer;
         int writePos = 0;
+        int bufferSizeMask = 0;  // OPTIMIZATION: Bit mask for power-of-2 buffer
         float modPhase = 0.0f;
         float modDepth = 0.0f;
     };
@@ -325,6 +326,7 @@ private:
     {
         std::vector<float> delayLine;
         int writePos = 0;
+        int delayLineMask = 0;  // OPTIMIZATION: Bit mask for power-of-2 delay line
         float feedback = 0.0f;
         float brightness = 0.5f;
         bool active = false;

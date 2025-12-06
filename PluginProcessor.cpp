@@ -146,8 +146,14 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
     for (size_t i = 0; i < oliverbTaps.size(); ++i)
     {
-        int tapSize = static_cast<int>(sampleRate * tapTimes[i]);
+        // OPTIMIZATION: Round to power of 2 for bit masking
+        int requestedSize = static_cast<int>(sampleRate * tapTimes[i]);
+        int tapSize = 1;
+        while (tapSize < requestedSize)
+            tapSize <<= 1;  // Find next power of 2
+
         oliverbTaps[i].buffer.resize(tapSize, 0.0f);
+        oliverbTaps[i].bufferSizeMask = tapSize - 1;  // OPTIMIZED: Bit mask
         oliverbTaps[i].writePos = 0;
         oliverbTaps[i].modPhase = static_cast<float>(i) * 0.125f * juce::MathConstants<float>::twoPi;  // OPTIMIZED: Multiply instead of divide
         oliverbTaps[i].modDepth = 0.002f * sampleRate;  // 2ms modulation depth
@@ -160,8 +166,14 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     };
     for (int i = 0; i < maxResonators; ++i)
     {
-        int delayLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        // OPTIMIZATION: Round to power of 2 for bit masking
+        int requestedLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        int delayLength = 1;
+        while (delayLength < requestedLength)
+            delayLength <<= 1;  // Find next power of 2
+
         resonators[i].delayLine.resize(delayLength, 0.0f);
+        resonators[i].delayLineMask = delayLength - 1;  // OPTIMIZED: Bit mask
         resonators[i].writePos = 0;
         resonators[i].feedback = 0.99f;
         resonators[i].brightness = 0.5f;
@@ -821,13 +833,22 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        int readPosInt = loopStartPos + static_cast<int>(loopReadPos);
-        if (readPosInt >= loopEndPos) readPosInt = loopStartPos;
-        if (readPosInt < 0) readPosInt += bufferSize;
-        readPosInt = readPosInt & bufferSizeMask;  // OPTIMIZED: Bit mask
+        // Use floating-point position for smooth interpolation (via getSampleFromRing)
+        double readPosFloat = loopStartPos + loopReadPos;
 
-        float outL = getSampleFromRing(0, readPosInt);
-        float outR = getSampleFromRing(1, readPosInt);
+        // Wrap position to loop boundaries
+        while (readPosFloat >= loopEndPos)
+        {
+            readPosFloat -= loopLength;
+        }
+        while (readPosFloat < loopStartPos)
+        {
+            readPosFloat += loopLength;
+        }
+
+        // getSampleFromRing handles interpolation and buffer wrapping
+        float outL = getSampleFromRing(0, readPosFloat);
+        float outR = getSampleFromRing(1, readPosFloat);
 
         wetL[i] = outL;
         wetR[i] = outR;
@@ -995,11 +1016,11 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
             if (tap.modPhase > juce::MathConstants<float>::twoPi)
                 tap.modPhase -= juce::MathConstants<float>::twoPi;
 
-            // Modulated read position (OPTIMIZED: LUT)
+            // Modulated read position (OPTIMIZED: LUT + Bit mask)
             float mod = fastSin(tap.modPhase) * modDepth;
             int readPos = tap.writePos - static_cast<int>((tap.buffer.size() >> 1) + mod);  // OPTIMIZED: Bit shift
             if (readPos < 0) readPos += tap.buffer.size();
-            readPos = readPos % tap.buffer.size();
+            readPos = readPos & tap.bufferSizeMask;  // OPTIMIZED: Bit mask instead of modulo
 
             float delayed = tap.buffer[readPos];
 
@@ -1009,7 +1030,7 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
             // Write input + feedback (OPTIMIZED: Bit shift for division by 8)
             float inputMix = (t & 1) ? inSampleR : inSampleL;  // OPTIMIZED: Bit mask instead of modulo
             tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback;
-            tap.writePos = (tap.writePos + 1) % tap.buffer.size();
+            tap.writePos = (tap.writePos + 1) & tap.bufferSizeMask;  // OPTIMIZED: Bit mask
 
             // Accumulate to output (alternate L/R)
             if (!(t & 1))  // OPTIMIZED: Bit mask instead of modulo
@@ -1076,7 +1097,8 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
                 float excite = (uniform(rng) * 2.0f - 1.0f) * excitation * inputEnergy;
                 for (size_t n = 0; n < res.delayLine.size() && n < 10; ++n)
                 {
-                    res.delayLine[(res.writePos + n) % res.delayLine.size()] += excite;
+                    // OPTIMIZED: Bit mask instead of modulo
+                    res.delayLine[(res.writePos + n) & res.delayLineMask] += excite;
                 }
             }
 
@@ -1086,12 +1108,13 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
                 float delayed = res.delayLine[readPos];
 
                 // Low-pass filter for damping (brightness control)
-                int prevPos = (readPos - 1 + res.delayLine.size()) % res.delayLine.size();
+                // OPTIMIZED: Bit mask instead of modulo
+                int prevPos = (readPos - 1 + res.delayLine.size()) & res.delayLineMask;
                 float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
 
                 // Feedback with decay
                 res.delayLine[res.writePos] = filtered * decay;
-                res.writePos = (res.writePos + 1) % res.delayLine.size();
+                res.writePos = (res.writePos + 1) & res.delayLineMask;  // OPTIMIZED: Bit mask
 
                 // Accumulate to output (alternate L/R) (OPTIMIZED: Bit mask)
                 if (!(r & 1))
