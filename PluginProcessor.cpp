@@ -1168,9 +1168,13 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
     float capturePos = position;
     float repeatLength = size * 0.5f * currentSampleRate;
-    // Beat Repeat: Map pitch directly to speed (allows negative for reverse)
-    // pitch range: -24 to +24 → speed range: -2.0 to +2.0
-    float playbackSpeed = pitch / 12.0f;  // Direct linear mapping for reverse playback
+    // Beat Repeat: Use pitch to control playback speed
+    // pitch range: -24 to +24 semitones
+    // Negative values = reverse playback, Positive = forward
+    // Map to speed: pitch=0 → 1.0x, pitch=±12 → 2.0x or -2.0x
+    float playbackSpeed = (pitch >= 0.0f)
+        ? (1.0f + pitch / 12.0f)      // Forward: 0→1.0x, +12→2.0x, +24→3.0x
+        : -(1.0f + std::abs(pitch) / 12.0f);  // Reverse: -12→-2.0x, -24→-3.0x
     float repeatRate = 1.0f + density * 15.0f;
     float stutterAmount = texture;
 
