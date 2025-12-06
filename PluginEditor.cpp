@@ -374,12 +374,14 @@ void CloudLikeGranularEditor::resized()
     placeKnob (trigRateKnob, trigRateArea);
 
     // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
+    // All buttons have equal size and spacing
     auto buttonArea = buttonRow.reduced (5);
-    auto third = buttonArea.getWidth() / 3;
+    auto buttonWidth = buttonArea.getWidth() / 3;
+    auto buttonPadding = 3;
 
-    auto trigModeArea = buttonArea.removeFromLeft (third).reduced (3);
-    auto freezeArea = buttonArea.removeFromLeft (third).reduced (3);
-    auto randomArea = buttonArea.reduced (3);
+    auto trigModeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
+    auto freezeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
+    auto randomArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
 
     trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
