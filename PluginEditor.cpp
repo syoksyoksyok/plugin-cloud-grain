@@ -24,7 +24,9 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setupKnob (feedbackKnob, "Feedback");
     setupKnob (reverbKnob,   "Reverb");
     setupKnob (mixKnob,      "Mix");
+    setupKnob (trigRateKnob, "Trig Rate");
 
+    addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (modeLabel);
@@ -33,6 +35,12 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
     modeLabel.setColour (juce::Label::textColourId, juce::Colour::fromRGB (52, 73, 94));  // Ink blue
     modeLabel.setJustificationType (juce::Justification::centred);
+
+    // Style TRIG Mode toggle button (E-Paper: matte black text)
+    trigModeButton.setColour (juce::ToggleButton::textColourId, juce::Colour::fromRGB (26, 26, 26));
+    trigModeButton.setColour (juce::ToggleButton::tickColourId, juce::Colour::fromRGB (26, 26, 26));
+    trigModeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
+    trigModeButton.setLookAndFeel (ePaperLookAndFeel.get());
 
     // Style Freeze button (E-Paper: matte black text)
     freezeButton.setColour (juce::ToggleButton::textColourId, juce::Colour::fromRGB (26, 26, 26));
@@ -73,6 +81,8 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     feedbackAttachment = std::make_unique<SliderAttachment> (apvts, "feedback", feedbackKnob.slider);
     reverbAttachment   = std::make_unique<SliderAttachment> (apvts, "reverb",   reverbKnob.slider);
     mixAttachment      = std::make_unique<SliderAttachment> (apvts, "mix",      mixKnob.slider);
+    trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
+    trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
 }
 
@@ -92,6 +102,8 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     feedbackKnob.slider.setLookAndFeel (nullptr);
     reverbKnob.slider.setLookAndFeel (nullptr);
     mixKnob.slider.setLookAndFeel (nullptr);
+    trigRateKnob.slider.setLookAndFeel (nullptr);
+    trigModeButton.setLookAndFeel (nullptr);
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
 
@@ -100,6 +112,18 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
 
 void CloudLikeGranularEditor::timerCallback()
 {
+    // Update TRIG mode button text based on parameter
+    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    juce::String trigModeText = trigMode ? "Auto" : "Manual";
+    if (trigModeButton.getButtonText() != trigModeText)
+    {
+        trigModeButton.setButtonText (trigModeText);
+    }
+    if (trigModeButton.getToggleState() != trigMode)
+    {
+        trigModeButton.setToggleState (trigMode, juce::dontSendNotification);
+    }
+
     // Update freeze button visual state based on parameter
     bool freezeState = processor.apvts.getRawParameterValue ("freeze")->load() > 0.5f;
     if (freezeButton.getToggleState() != freezeState)
@@ -272,13 +296,14 @@ void CloudLikeGranularEditor::resized()
     modeLabel.setBounds (titleArea.withTrimmedLeft (titleArea.getWidth() / 4)
                                    .withTrimmedRight (titleArea.getWidth() / 4));
 
-    // E-Paper UI: 2 rows × 5 columns grid
+    // E-Paper UI: 3 rows × 5 columns grid (added 3rd row for TRIG rate)
     auto buttonRow = area.removeFromBottom (50);
     auto knobArea = area.reduced (0, 10);
 
-    auto rowHeight = knobArea.getHeight() / 2;
+    auto rowHeight = knobArea.getHeight() / 3;
     auto row1 = knobArea.removeFromTop (rowHeight);
-    auto row2 = knobArea;
+    auto row2 = knobArea.removeFromTop (rowHeight);
+    auto row3 = knobArea;
 
     auto colWidth = row1.getWidth() / 5;
 
@@ -302,13 +327,19 @@ void CloudLikeGranularEditor::resized()
     placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
     placeKnob (modeKnob,     row2.removeFromLeft (colWidth));
 
-    // E-Paper UI: Buttons at bottom
-    auto buttonArea = buttonRow.reduced (5);
-    auto half = buttonArea.getWidth() / 2;
+    // Row 3: TRIG Rate (centered, single knob)
+    auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
+    placeKnob (trigRateKnob, trigRateArea);
 
-    auto freezeArea = buttonArea.removeFromLeft (half).reduced (3);
+    // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
+    auto buttonArea = buttonRow.reduced (5);
+    auto third = buttonArea.getWidth() / 3;
+
+    auto trigModeArea = buttonArea.removeFromLeft (third).reduced (3);
+    auto freezeArea = buttonArea.removeFromLeft (third).reduced (3);
     auto randomArea = buttonArea.reduced (3);
 
+    trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
 }

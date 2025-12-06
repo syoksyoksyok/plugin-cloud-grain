@@ -352,6 +352,7 @@ private:
     // TRIG system state
     std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
     bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
+    double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;

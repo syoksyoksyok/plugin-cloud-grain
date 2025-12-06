@@ -133,7 +133,9 @@ private:
 
     Knob modeKnob, positionKnob, sizeKnob, pitchKnob, densityKnob;
     Knob textureKnob, spreadKnob, feedbackKnob, reverbKnob, mixKnob;
+    Knob trigRateKnob;  // 3rd row: TRIG rate/division control
 
+    juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
     juce::Label modeLabel;  // Displays current mode (Granular/Pitch Shifter/etc.)
@@ -151,6 +153,8 @@ private:
     std::unique_ptr<SliderAttachment> feedbackAttachment;
     std::unique_ptr<SliderAttachment> reverbAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
+    std::unique_ptr<SliderAttachment> trigRateAttachment;
+    std::unique_ptr<ButtonAttachment> trigModeAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
     void setupKnob (Knob& k, const juce::String& name);
