@@ -1146,7 +1146,9 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
     float capturePos = position;
     float repeatLength = size * 0.5f * currentSampleRate;
-    float playbackSpeed = pitchToRatio(pitch);
+    // Beat Repeat: Map pitch directly to speed (allows negative for reverse)
+    // pitch range: -24 to +24 → speed range: -2.0 to +2.0
+    float playbackSpeed = pitch / 12.0f;  // Direct linear mapping for reverse playback
     float repeatRate = 1.0f + density * 15.0f;
     float stutterAmount = texture;
 
@@ -1189,8 +1191,14 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         // Playback captured buffer
         if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
         {
+            // Wrap repeatPos to valid range (handles both positive and negative speeds)
+            while (beatRepeat.repeatPos < 0.0f)
+                beatRepeat.repeatPos += beatRepeat.captureLength;
+            while (beatRepeat.repeatPos >= beatRepeat.captureLength)
+                beatRepeat.repeatPos -= beatRepeat.captureLength;
+
             // Use linear interpolation for smooth playback at any speed
-            float readPosFloat = std::fmod(beatRepeat.repeatPos, static_cast<float>(beatRepeat.captureLength));
+            float readPosFloat = beatRepeat.repeatPos;
             int readPos0 = static_cast<int>(readPosFloat);
             int readPos1 = (readPos0 + 1) % beatRepeat.captureLength;
             float frac = readPosFloat - readPos0;
@@ -1206,18 +1214,18 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
             if (stutterAmount > 0.5f)
             {
                 float stutterFreq = (stutterAmount - 0.5f) * 40.0f + 2.0f;
-                float stutterPhaseLocal = std::fmod(beatRepeat.repeatPos / beatRepeat.captureLength * stutterFreq, 1.0f);
+                float normalizedPos = beatRepeat.repeatPos / beatRepeat.captureLength;
+                // Ensure normalized position is positive for stutter phase calculation
+                while (normalizedPos < 0.0f) normalizedPos += 1.0f;
+                float stutterPhaseLocal = std::fmod(normalizedPos * stutterFreq, 1.0f);
                 stutterEnv = stutterPhaseLocal < 0.5f ? 1.0f : 0.3f;
             }
 
             wetL[i] = outL * stutterEnv;
             wetR[i] = outR * stutterEnv;
 
+            // Advance playback position (supports negative speed for reverse)
             beatRepeat.repeatPos += playbackSpeed;
-            if (beatRepeat.repeatPos >= beatRepeat.captureLength)
-            {
-                beatRepeat.repeatPos -= beatRepeat.captureLength;  // Better wrapping
-            }
         }
         else
         {
