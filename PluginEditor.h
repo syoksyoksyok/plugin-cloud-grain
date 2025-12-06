@@ -110,7 +110,6 @@ public:
 
 //==============================================================================
 class CloudLikeGranularEditor  : public juce::AudioProcessorEditor
-                               , public juce::AsyncUpdater
                                , public juce::Timer
 {
 public:
@@ -119,7 +118,6 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void handleAsyncUpdate() override;
     void timerCallback() override;
 
 private:
@@ -137,7 +135,7 @@ private:
     Knob textureKnob, spreadKnob, feedbackKnob, reverbKnob, mixKnob;
 
     juce::ToggleButton freezeButton  { "Freeze" };
-    juce::ToggleButton randomButton { "Randomize" };
+    juce::TextButton randomButton { "Randomize" };
     juce::Label modeLabel;  // Displays current mode (Granular/Pitch Shifter/etc.)
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
