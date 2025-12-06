@@ -1166,10 +1166,17 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         // Playback captured buffer
         if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
         {
-            int readPos = static_cast<int>(beatRepeat.repeatPos) % beatRepeat.captureLength;
+            // Use linear interpolation for smooth playback at any speed
+            float readPosFloat = std::fmod(beatRepeat.repeatPos, static_cast<float>(beatRepeat.captureLength));
+            int readPos0 = static_cast<int>(readPosFloat);
+            int readPos1 = (readPos0 + 1) % beatRepeat.captureLength;
+            float frac = readPosFloat - readPos0;
 
-            float outL = beatRepeat.captureBufferL[readPos];
-            float outR = beatRepeat.captureBufferR[readPos];
+            // Interpolate between samples for smooth playback
+            float outL = beatRepeat.captureBufferL[readPos0] +
+                        (beatRepeat.captureBufferL[readPos1] - beatRepeat.captureBufferL[readPos0]) * frac;
+            float outR = beatRepeat.captureBufferR[readPos0] +
+                        (beatRepeat.captureBufferR[readPos1] - beatRepeat.captureBufferR[readPos0]) * frac;
 
             // Apply stutter envelope
             float stutterEnv = 1.0f;
@@ -1186,7 +1193,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
             beatRepeat.repeatPos += playbackSpeed;
             if (beatRepeat.repeatPos >= beatRepeat.captureLength)
             {
-                beatRepeat.repeatPos = 0;
+                beatRepeat.repeatPos -= beatRepeat.captureLength;  // Better wrapping
             }
         }
         else
