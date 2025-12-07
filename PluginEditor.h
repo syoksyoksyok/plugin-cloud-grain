@@ -98,10 +98,10 @@ public:
             auto tickRadius = radius - 2.0f;
             auto tickLength = 6.0f;
 
-            auto tickX1 = centreX - tickRadius * std::cos (tickAngle - juce::MathConstants<float>::halfPi);  // Negated X-axis
-            auto tickY1 = centreY - tickRadius * std::sin (tickAngle - juce::MathConstants<float>::halfPi);  // Negated Y-axis
-            auto tickX2 = centreX - (tickRadius - tickLength) * std::cos (tickAngle - juce::MathConstants<float>::halfPi);  // Negated X-axis
-            auto tickY2 = centreY - (tickRadius - tickLength) * std::sin (tickAngle - juce::MathConstants<float>::halfPi);  // Negated Y-axis
+            auto tickX1 = centreX + tickRadius * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
+            auto tickY1 = centreY + tickRadius * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
+            auto tickX2 = centreX + (tickRadius - tickLength) * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
+            auto tickY2 = centreY + (tickRadius - tickLength) * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
 
             g.drawLine (tickX1, tickY1, tickX2, tickY2, 2.0f);
         }
@@ -115,8 +115,8 @@ public:
         auto pointerLength = radius - 8.0f;
         auto pointerThickness = 3.0f;
         juce::Path p;
-        auto pointerX = centreX - pointerLength * std::cos (angle - juce::MathConstants<float>::halfPi);  // Negated to flip X-axis (left/right)
-        auto pointerY = centreY - pointerLength * std::sin (angle - juce::MathConstants<float>::halfPi);  // Negated to flip Y-axis (up/down)
+        auto pointerX = centreX + pointerLength * std::cos (angle - juce::MathConstants<float>::halfPi);
+        auto pointerY = centreY + pointerLength * std::sin (angle - juce::MathConstants<float>::halfPi);
 
         p.startNewSubPath (centreX, centreY);
         p.lineTo (pointerX, pointerY);
