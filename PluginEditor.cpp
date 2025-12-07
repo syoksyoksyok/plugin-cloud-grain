@@ -61,6 +61,41 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get());
     setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get());
 
+    // Custom text display for TRIG RATE: Show note values instead of numeric values
+    trigRateKnob.slider.textFromValueFunction = [](double value)
+    {
+        float trigRate = static_cast<float>(value);
+
+        if (trigRate < -3.4f)      return juce::String("1/16");
+        else if (trigRate < -2.8f) return juce::String("1/16T");
+        else if (trigRate < -2.2f) return juce::String("1/8");
+        else if (trigRate < -1.6f) return juce::String("1/8T");
+        else if (trigRate < -0.8f) return juce::String("1/4");
+        else if (trigRate < 0.0f)  return juce::String("1/4T");
+        else if (trigRate < 0.8f)  return juce::String("1/2");
+        else if (trigRate < 1.6f)  return juce::String("1/2T");
+        else if (trigRate < 2.4f)  return juce::String("1bar");
+        else if (trigRate < 3.2f)  return juce::String("1barT");
+        else                       return juce::String("2bars");
+    };
+
+    trigRateKnob.slider.valueFromTextFunction = [](const juce::String& text)
+    {
+        // Map text back to numeric value (center of each range)
+        if (text == "1/16")    return -3.6;
+        if (text == "1/16T")   return -3.0;
+        if (text == "1/8")     return -2.5;
+        if (text == "1/8T")    return -1.9;
+        if (text == "1/4")     return -1.2;
+        if (text == "1/4T")    return -0.4;
+        if (text == "1/2")     return 0.4;
+        if (text == "1/2T")    return 1.2;
+        if (text == "1bar")    return 2.0;
+        if (text == "1barT")   return 2.8;
+        if (text == "2bars")   return 3.6;
+        return 0.0;  // Default to 1/2 note
+    };
+
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
