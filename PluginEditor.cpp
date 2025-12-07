@@ -446,7 +446,7 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.fillEllipse (ledX1 + 2, ledY + 2, ledSize - 4, ledSize - 4);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX1, ledY, ledSize, ledSize, 1.5f);
+    g.drawEllipse (ledX1, ledY, ledSize, ledSize, 0.75f);
 
     // LED 2: TRIG RATE tempo
     g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
@@ -457,7 +457,7 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.fillEllipse (ledX2 + 2, ledY + 2, ledSize - 4, ledSize - 4);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX2, ledY, ledSize, ledSize, 1.5f);
+    g.drawEllipse (ledX2, ledY, ledSize, ledSize, 0.75f);
 
     // LED labels
     g.setColour (uiColors.knobLabel);
