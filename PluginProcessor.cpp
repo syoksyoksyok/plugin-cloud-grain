@@ -486,7 +486,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 else                       noteValue = 2.0;         // 2 bars
 
                 double beatsPerSecond = bpm / 60.0;
-                double triggersPerSecond = beatsPerSecond / noteValue;
+                double triggersPerSecond = beatsPerSecond / (noteValue * 4.0);
                 double phaseIncrement = triggersPerSecond / currentSampleRate;
 
                 for (int i = 0; i < numSamples; ++i)
@@ -560,12 +560,12 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
                 // Calculate frequency: triggers per second
                 double beatsPerSecond = bpm / 60.0;
-                double triggersPerSecond = beatsPerSecond / noteValue;
+                double triggersPerSecond = beatsPerSecond / (noteValue * 4.0);
                 double phaseIncrement = triggersPerSecond / currentSampleRate;
 
                 // Calculate base tempo LED phase (always ×1 quarter note)
                 double baseNoteValue = 1.0 / 4.0;  // Quarter note
-                double baseTriggersPerSecond = beatsPerSecond / baseNoteValue;
+                double baseTriggersPerSecond = beatsPerSecond / (baseNoteValue * 4.0);
                 double basePhaseIncrement = baseTriggersPerSecond / currentSampleRate;
 
                 // Accumulate phase and generate triggers
