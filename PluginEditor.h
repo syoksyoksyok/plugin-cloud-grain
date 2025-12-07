@@ -77,8 +77,8 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
-        // Reverse the angle calculation (theory says this is wrong, but user feedback suggests we need this)
-        auto angle = rotaryStartAngle + (1.0f - sliderPos) * (rotaryEndAngle - rotaryStartAngle);
+        // Standard angle calculation with Y-axis negated in rendering
+        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
         juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
@@ -99,9 +99,9 @@ public:
             auto tickLength = 6.0f;
 
             auto tickX1 = centreX + tickRadius * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
-            auto tickY1 = centreY + tickRadius * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
+            auto tickY1 = centreY - tickRadius * std::sin (tickAngle - juce::MathConstants<float>::halfPi);  // Negated Y-axis
             auto tickX2 = centreX + (tickRadius - tickLength) * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
-            auto tickY2 = centreY + (tickRadius - tickLength) * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
+            auto tickY2 = centreY - (tickRadius - tickLength) * std::sin (tickAngle - juce::MathConstants<float>::halfPi);  // Negated Y-axis
 
             g.drawLine (tickX1, tickY1, tickX2, tickY2, 2.0f);
         }
@@ -116,7 +116,7 @@ public:
         auto pointerThickness = 3.0f;
         juce::Path p;
         auto pointerX = centreX + pointerLength * std::cos (angle - juce::MathConstants<float>::halfPi);
-        auto pointerY = centreY + pointerLength * std::sin (angle - juce::MathConstants<float>::halfPi);
+        auto pointerY = centreY - pointerLength * std::sin (angle - juce::MathConstants<float>::halfPi);  // Negated to flip Y-axis (up/down)
 
         p.startNewSubPath (centreX, centreY);
         p.lineTo (pointerX, pointerY);
