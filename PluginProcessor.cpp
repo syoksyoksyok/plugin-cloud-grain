@@ -612,6 +612,10 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 res.writePos = 0;
                 res.active = false;
             }
+            // Reset Parasites-style burst and voice state
+            resonestorVoice = 0;
+            resonestorBurstTime = 0.0f;
+            resonestorPreviousTrigger = false;
         }
 
         // Clear Oliverb taps when switching away from or to Oliverb mode
@@ -1244,8 +1248,9 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
         else
         {
-            wetL[i] = 0.0f;
-            wetR[i] = 0.0f;
+            // Pass through input until FFT processing catches up (fixes initial silence)
+            wetL[i] = inSampleL;
+            wetR[i] = inSampleR;
         }
     }
 }
@@ -1332,8 +1337,10 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
         float diffusedL = outputL * (1.0f - diffusion) + outputR * diffusion;
         float diffusedR = outputR * (1.0f - diffusion) + outputL * diffusion;
 
-        wetL[i] = diffusedL * 0.25f;
-        wetR[i] = diffusedR * 0.25f;
+        // Mix with direct input for immediate sound (Parasites-style)
+        // Reverb output + dry signal attenuated
+        wetL[i] = diffusedL * 0.8f + inSampleL * 0.3f;
+        wetR[i] = diffusedR * 0.8f + inSampleR * 0.3f;
     }
 }
 
@@ -1346,29 +1353,37 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== RESONESTOR MODE (Block Processing) ==========
-    // OPTIMIZATION: Calculate parameters once per block
-    float excitation = position;
-    float decayTime = size;
-    float pitchShift = pitch;  // -24 to +24 semitones
-    float activationThreshold = 1.0f - density;
-    float brightness = texture;
-    float decay = 0.9f + decayTime * 0.099f;  // 0.9 to 0.999
-    float damping = 0.5f + brightness * 0.5f;  // 0.5 to 1.0
+    // ========== RESONESTOR MODE (Parasites-style) ==========
+    // Parameters mapped to Parasites control scheme
+    float excitationAmount = position;  // Excitation intensity
+    float decayTime = size;             // Resonator decay time
+    float pitchShift = pitch;           // Pitch shift (-24 to +24 semitones)
+    float burstDuration = density * 2.0f;  // Burst duration (0 to 2.0)
+    float brightness = texture;         // Filter brightness
+    float decay = 0.95f + decayTime * 0.045f;  // 0.95 to 0.995
+    float damping = 0.3f + brightness * 0.7f;  // 0.3 to 1.0 (lower = darker)
 
-    // Convert pitch shift to playback rate (same as pitch ratio calculation)
+    // Convert pitch shift to playback rate
     float pitchRatio = pitchToRatio(pitchShift);
+
+    // TRIG input: Voice switching (Parasites behavior)
+    // Toggle voice on trigger rising edge (unless frozen)
+    bool currentTrigger = triggerReceived.load();
+    if (currentTrigger && !resonestorPreviousTrigger && !freeze)
+    {
+        resonestorVoice = !resonestorVoice;  // Toggle between voice 0 and 1
+
+        // Start burst: duration based on first resonator's period and density
+        // Burst time = comb period × 2 × burst_duration
+        int combPeriod = static_cast<int>(resonators[0].delayLine.size());
+        resonestorBurstTime = combPeriod * 2.0f * (burstDuration + 0.1f);
+    }
+    resonestorPreviousTrigger = currentTrigger;
+    if (currentTrigger)
+        triggerReceived.store(false);
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Excite all resonators (Kammerl/Parasites behavior)
-        bool triggerExcitation = false;
-        if (i == 0 && triggerReceived.load())
-        {
-            triggerExcitation = true;
-            triggerReceived.store(false);
-        }
-
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
@@ -1376,75 +1391,61 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            writeHead = (writeHead + 1) & bufferSizeMask;
         }
+
+        // Generate burst noise (Parasites-style)
+        float burstGain = resonestorBurstTime > 0.0f ? 1.0f : 0.0f;
+        float burstNoise = (uniform(rng) * 2.0f - 1.0f) * burstGain * excitationAmount;
+
+        // Decrement burst time
+        if (resonestorBurstTime > 0.0f)
+            resonestorBurstTime -= 1.0f;
 
         float outputL = 0.0f;
         float outputR = 0.0f;
-        int activeCount = 0;
 
-        // Excite resonators based on input energy
-        float inputEnergy = std::abs(inSampleL) + std::abs(inSampleR);
-
-        // TRIG: Force excitation with impulse
-        if (triggerExcitation)
-            inputEnergy = 1.0f;
-
-        // Process each resonator
+        // Process each resonator (all active, Parasites-style)
+        // Resonators are split into two voices (6 resonators each)
         for (int r = 0; r < maxResonators; ++r)
         {
             auto& res = resonators[r];
 
-            // Activate resonator based on density and input
-            if (inputEnergy > activationThreshold * 0.1f && uniform(rng) > activationThreshold)
-            {
-                res.active = true;
-                float excite = (uniform(rng) * 2.0f - 1.0f) * excitation * inputEnergy;
-                for (size_t n = 0; n < res.delayLine.size() && n < 10; ++n)
-                {
-                    // OPTIMIZED: Bit mask instead of modulo
-                    res.delayLine[(res.writePos + n) & res.delayLineMask] += excite;
-                }
-            }
+            // Determine which voice this resonator belongs to
+            int voiceIndex = r / 6;  // 0-5 = voice 0, 6-11 = voice 1
 
-            if (res.active)
-            {
-                activeCount++;
+            // Input mix: burst noise for current voice, attenuated for other voice
+            float inputMix = (voiceIndex == resonestorVoice) ? 1.0f : 0.3f;
 
-                // Apply pitch shift by modulating read position
-                // pitchRatio > 1.0 = higher pitch (shorter delay), < 1.0 = lower pitch (longer delay)
-                float pitchOffset = (1.0f - pitchRatio) * res.delayLine.size() * 0.5f;
-                int readPos = static_cast<int>(res.writePos + pitchOffset) & res.delayLineMask;
-                float delayed = res.delayLine[readPos];
+            // Combine burst noise and direct input
+            float excitation = burstNoise * inputMix +
+                              ((r & 1) ? inSampleR : inSampleL) * 0.1f;
 
-                // Low-pass filter for damping (brightness control)
-                // OPTIMIZED: Bit mask instead of modulo
-                int prevPos = (readPos - 1 + res.delayLine.size()) & res.delayLineMask;
-                float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
+            // Write excitation to delay line
+            res.delayLine[res.writePos] += excitation;
 
-                // Feedback with decay
-                res.delayLine[res.writePos] = filtered * decay;
-                res.writePos = (res.writePos + 1) & res.delayLineMask;  // OPTIMIZED: Bit mask
+            // Apply pitch shift by modulating read position
+            float pitchOffset = (1.0f - pitchRatio) * res.delayLine.size() * 0.5f;
+            int readPos = static_cast<int>(res.writePos + pitchOffset) & res.delayLineMask;
+            float delayed = res.delayLine[readPos];
 
-                // Accumulate to output (alternate L/R) (OPTIMIZED: Bit mask)
-                if (!(r & 1))
-                    outputL += filtered;
-                else
-                    outputR += filtered;
+            // Low-pass filter for damping (brightness control)
+            int prevPos = (readPos - 1 + res.delayLine.size()) & res.delayLineMask;
+            float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
 
-                // Deactivate if energy too low
-                if (std::abs(filtered) < 0.0001f)
-                    res.active = false;
-            }
+            // Feedback with decay (comb filter)
+            res.delayLine[res.writePos] = filtered * decay;
+            res.writePos = (res.writePos + 1) & res.delayLineMask;
+
+            // Accumulate to output (alternate L/R)
+            if (!(r & 1))
+                outputL += filtered;
+            else
+                outputR += filtered;
         }
 
-        // Normalize by number of active resonators to prevent loudness buildup
-        float gain = 0.1f;  // Base gain reduced from 0.15f
-        if (activeCount > 0)
-        {
-            // Normalize by active count with gentle scaling
-            gain *= fastInverseSqrt(static_cast<float>(activeCount) * 0.5f + 1.0f);
-        }
+        // Output gain (normalized for 12 resonators)
+        float gain = 0.15f / sqrtf(maxResonators);
 
         wetL[i] = outputL * gain;
         wetR[i] = outputR * gain;

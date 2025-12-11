@@ -338,6 +338,11 @@ private:
     };
     std::array<Resonator, maxResonators> resonators;
 
+    // Resonestor: Voice switching and burst noise (Parasites-style)
+    int resonestorVoice = 0;  // Current voice (0 or 1)
+    float resonestorBurstTime = 0.0f;  // Burst duration counter
+    bool resonestorPreviousTrigger = false;  // For trigger edge detection
+
     // Beat Repeat mode state
     struct BeatRepeatState
     {
