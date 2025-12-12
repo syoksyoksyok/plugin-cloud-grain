@@ -213,6 +213,17 @@ private:
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
 
+    // Custom value labels for all knobs (displays meaningful text instead of raw numbers)
+    juce::Label positionValueLabel;
+    juce::Label sizeValueLabel;
+    juce::Label pitchValueLabel;
+    juce::Label densityValueLabel;
+    juce::Label textureValueLabel;
+    juce::Label spreadValueLabel;
+    juce::Label feedbackValueLabel;
+    juce::Label reverbValueLabel;
+    juce::Label mixValueLabel;
+
     // LED indicators for tempo visualization
     bool baseTempoLedOn = false;   // LED 1: Base tempo (×1) indicator
     bool trigRateLedOn = false;    // LED 2: TRIG RATE tempo indicator

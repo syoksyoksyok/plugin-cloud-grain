@@ -44,25 +44,33 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateLookAndFeel = std::make_unique<EPaperLookAndFeel>();
     trigRateLookAndFeel->knobColors = &uiColors.trigRate;
 
-    // Setup knobs with their individual LookAndFeel instances
-    setupKnob (modeKnob, "Mode", modeLookAndFeel.get(), false);  // No text box - use custom label
-
-    setupKnob (positionKnob, "Position", positionLookAndFeel.get());
-    setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
-    setupKnob (pitchKnob,    "Pitch",    pitchLookAndFeel.get());
-    setupKnob (densityKnob,  "Density",  densityLookAndFeel.get());
-    setupKnob (textureKnob,  "Texture",  textureLookAndFeel.get());
-    setupKnob (spreadKnob,   "Spread",   spreadLookAndFeel.get());
-    setupKnob (feedbackKnob, "Feedback", feedbackLookAndFeel.get());
-    setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get());
-    setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get());
-    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get(), false);  // No text box - use custom label
+    // Setup knobs with their individual LookAndFeel instances (all use custom labels)
+    setupKnob (modeKnob, "Mode", modeLookAndFeel.get(), false);
+    setupKnob (positionKnob, "Position", positionLookAndFeel.get(), false);
+    setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get(), false);
+    setupKnob (pitchKnob,    "Pitch",    pitchLookAndFeel.get(), false);
+    setupKnob (densityKnob,  "Density",  densityLookAndFeel.get(), false);
+    setupKnob (textureKnob,  "Texture",  textureLookAndFeel.get(), false);
+    setupKnob (spreadKnob,   "Spread",   spreadLookAndFeel.get(), false);
+    setupKnob (feedbackKnob, "Feedback", feedbackLookAndFeel.get(), false);
+    setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get(), false);
+    setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get(), false);
+    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get(), false);
 
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
+    addAndMakeVisible (positionValueLabel);
+    addAndMakeVisible (sizeValueLabel);
+    addAndMakeVisible (pitchValueLabel);
+    addAndMakeVisible (densityValueLabel);
+    addAndMakeVisible (textureValueLabel);
+    addAndMakeVisible (spreadValueLabel);
+    addAndMakeVisible (feedbackValueLabel);
+    addAndMakeVisible (reverbValueLabel);
+    addAndMakeVisible (mixValueLabel);
 
     // Style MODE value label (E-Paper: shows current mode name)
     modeValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
@@ -73,6 +81,24 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
     trigRateValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     trigRateValueLabel.setJustificationType (juce::Justification::centred);
+
+    // Style all knob value labels (E-Paper: shows meaningful values)
+    auto setupValueLabel = [this] (juce::Label& label)
+    {
+        label.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+        label.setColour (juce::Label::textColourId, uiColors.knobLabel);
+        label.setJustificationType (juce::Justification::centred);
+    };
+
+    setupValueLabel (positionValueLabel);
+    setupValueLabel (sizeValueLabel);
+    setupValueLabel (pitchValueLabel);
+    setupValueLabel (densityValueLabel);
+    setupValueLabel (textureValueLabel);
+    setupValueLabel (spreadValueLabel);
+    setupValueLabel (feedbackValueLabel);
+    setupValueLabel (reverbValueLabel);
+    setupValueLabel (mixValueLabel);
 
     // Style TRIG Mode toggle button (E-Paper: matte black text)
     trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
@@ -305,6 +331,96 @@ void CloudLikeGranularEditor::timerCallback()
         trigRateValueLabel.setText (trigRateValueText, juce::dontSendNotification);
     }
 
+    // Update all knob value labels with mode-specific formatting
+    float position = processor.apvts.getRawParameterValue ("position")->load();
+    float size = processor.apvts.getRawParameterValue ("size")->load();
+    float pitch = processor.apvts.getRawParameterValue ("pitch")->load();
+    float density = processor.apvts.getRawParameterValue ("density")->load();
+    float texture = processor.apvts.getRawParameterValue ("texture")->load();
+    float spread = processor.apvts.getRawParameterValue ("spread")->load();
+    float feedback = processor.apvts.getRawParameterValue ("feedback")->load();
+    float reverb = processor.apvts.getRawParameterValue ("reverb")->load();
+    float mix = processor.apvts.getRawParameterValue ("mix")->load();
+
+    juce::String posValueText, sizeValueText, pitchValueText, densityValueText, textureValueText;
+
+    // Mode-specific formatting
+    switch (mode)
+    {
+        case 0: // Granular
+        case 1: // Pitch Shifter
+        case 3: // Spectral
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
+        case 2: // Looping
+        case 6: // Beat Repeat
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
+            // Speed: pitch -24 to +24 semitones -> 0.25x to 4x speed
+            pitchValueText = juce::String (std::pow (2.0f, pitch / 12.0f), 2) + "x";
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
+        case 4: // Oliverb
+            // ModRate: position 0-1 -> 0-10 Hz
+            posValueText = juce::String (position * 10.0f, 1) + "Hz";
+            // Decay: size 0.016-1.0 -> 2%-100%
+            sizeValueText = juce::String (static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
+        case 5: // Resonestor
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            // Decay: size 0.016-1.0 -> 2%-100%
+            sizeValueText = juce::String (static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
+        default:
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+    }
+
+    // Common formatting (same for all modes)
+    juce::String spreadValueText = juce::String (static_cast<int>(spread * 100.0f)) + "%";
+    juce::String feedbackValueText = juce::String (static_cast<int>(feedback * 100.0f)) + "%";
+    juce::String reverbValueText = juce::String (static_cast<int>(reverb * 100.0f)) + "%";
+    juce::String mixValueText = juce::String (static_cast<int>(mix * 100.0f)) + "%";
+
+    // Update labels if changed
+    if (positionValueLabel.getText() != posValueText)
+        positionValueLabel.setText (posValueText, juce::dontSendNotification);
+    if (sizeValueLabel.getText() != sizeValueText)
+        sizeValueLabel.setText (sizeValueText, juce::dontSendNotification);
+    if (pitchValueLabel.getText() != pitchValueText)
+        pitchValueLabel.setText (pitchValueText, juce::dontSendNotification);
+    if (densityValueLabel.getText() != densityValueText)
+        densityValueLabel.setText (densityValueText, juce::dontSendNotification);
+    if (textureValueLabel.getText() != textureValueText)
+        textureValueLabel.setText (textureValueText, juce::dontSendNotification);
+    if (spreadValueLabel.getText() != spreadValueText)
+        spreadValueLabel.setText (spreadValueText, juce::dontSendNotification);
+    if (feedbackValueLabel.getText() != feedbackValueText)
+        feedbackValueLabel.setText (feedbackValueText, juce::dontSendNotification);
+    if (reverbValueLabel.getText() != reverbValueText)
+        reverbValueLabel.setText (reverbValueText, juce::dontSendNotification);
+    if (mixValueLabel.getText() != mixValueText)
+        mixValueLabel.setText (mixValueText, juce::dontSendNotification);
+
     // Update LED indicators for tempo visualization
     // LED 1: Base tempo (×1 quarter note)
     if (processor.baseTempoBlink.load())
@@ -452,23 +568,44 @@ void CloudLikeGranularEditor::resized()
     };
 
     // Row 1: Position, Density, Size, Texture, Pitch
-    placeKnob (positionKnob, row1.removeFromLeft (colWidth));
-    placeKnob (densityKnob,  row1.removeFromLeft (colWidth));
-    placeKnob (sizeKnob,     row1.removeFromLeft (colWidth));
-    placeKnob (textureKnob,  row1.removeFromLeft (colWidth));
-    placeKnob (pitchKnob,    row1.removeFromLeft (colWidth));
+    auto positionKnobArea = row1.removeFromLeft (colWidth);
+    auto densityKnobArea = row1.removeFromLeft (colWidth);
+    auto sizeKnobArea = row1.removeFromLeft (colWidth);
+    auto textureKnobArea = row1.removeFromLeft (colWidth);
+    auto pitchKnobArea = row1.removeFromLeft (colWidth);
+
+    placeKnob (positionKnob, positionKnobArea);
+    placeKnob (densityKnob,  densityKnobArea);
+    placeKnob (sizeKnob,     sizeKnobArea);
+    placeKnob (textureKnob,  textureKnobArea);
+    placeKnob (pitchKnob,    pitchKnobArea);
+
+    // Row 1 value labels (below each knob)
+    positionValueLabel.setBounds (positionKnobArea.withHeight (20).withY (positionKnobArea.getBottom() - 25));
+    densityValueLabel.setBounds (densityKnobArea.withHeight (20).withY (densityKnobArea.getBottom() - 25));
+    sizeValueLabel.setBounds (sizeKnobArea.withHeight (20).withY (sizeKnobArea.getBottom() - 25));
+    textureValueLabel.setBounds (textureKnobArea.withHeight (20).withY (textureKnobArea.getBottom() - 25));
+    pitchValueLabel.setBounds (pitchKnobArea.withHeight (20).withY (pitchKnobArea.getBottom() - 25));
 
     // Row 2: Spread, Feedback, Reverb, Mix, Mode
-    placeKnob (spreadKnob,   row2.removeFromLeft (colWidth));
-    placeKnob (feedbackKnob, row2.removeFromLeft (colWidth));
-    placeKnob (reverbKnob,   row2.removeFromLeft (colWidth));
-    placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
+    auto spreadKnobArea = row2.removeFromLeft (colWidth);
+    auto feedbackKnobArea = row2.removeFromLeft (colWidth);
+    auto reverbKnobArea = row2.removeFromLeft (colWidth);
+    auto mixKnobArea = row2.removeFromLeft (colWidth);
     auto modeKnobArea = row2.removeFromLeft (colWidth);
+
+    placeKnob (spreadKnob,   spreadKnobArea);
+    placeKnob (feedbackKnob, feedbackKnobArea);
+    placeKnob (reverbKnob,   reverbKnobArea);
+    placeKnob (mixKnob,      mixKnobArea);
     placeKnob (modeKnob,     modeKnobArea);
 
-    // MODE value label (shows current mode name below the knob)
-    auto modeValueLabelArea = modeKnobArea.withHeight (20).withY (modeKnobArea.getBottom() - 25);
-    modeValueLabel.setBounds (modeValueLabelArea);
+    // Row 2 value labels (below each knob)
+    spreadValueLabel.setBounds (spreadKnobArea.withHeight (20).withY (spreadKnobArea.getBottom() - 25));
+    feedbackValueLabel.setBounds (feedbackKnobArea.withHeight (20).withY (feedbackKnobArea.getBottom() - 25));
+    reverbValueLabel.setBounds (reverbKnobArea.withHeight (20).withY (reverbKnobArea.getBottom() - 25));
+    mixValueLabel.setBounds (mixKnobArea.withHeight (20).withY (mixKnobArea.getBottom() - 25));
+    modeValueLabel.setBounds (modeKnobArea.withHeight (20).withY (modeKnobArea.getBottom() - 25));
 
     // Row 3: TRIG Rate (centered, single knob)
     auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
