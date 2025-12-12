@@ -58,6 +58,9 @@ public:
     std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
     std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
 
+    // Host BPM (public for UI access in Auto mode)
+    std::atomic<float> hostBPM { 0.0f };  // BPM from DAW (Auto mode)
+
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     // Grain structure (public for potential visualization)
@@ -449,37 +452,78 @@ private:
     float resonestorBurstDecay = 0.9995f;
     bool resonestorPreviousTrigger = false;  // For trigger edge detection
 
-    // Beat Repeat mode state (Clouds/SuperParasites-style improvements)
+    // Beat Repeat mode state (SuperParasites Kammerl-style)
     struct BeatRepeatState
     {
         std::vector<float> captureBufferL;
         std::vector<float> captureBufferR;
         int captureLength = 0;
-        float repeatPos = 0.0f;  // Changed to float for sub-sample accuracy
-        float stutterPhase = 0.0f;
-        bool isCapturing = false;
+        float repeatPos = 0.0f;  // Sub-sample accurate playback position
+        bool isPlaying = false;
 
-        // Option 1: DENSITY quantized divisions
-        static constexpr int numDivisions = 8;
-        std::array<float, numDivisions> divisions = {32.0f, 16.0f, 8.0f, 4.0f, 2.0f, 1.0f, 0.5f, 0.25f};
+        // === Trigger interval measurement (Kammerl-style) ===
+        int numSamplesSinceTrigger = 0;      // Samples since last trigger
+        int sliceSizeSamples = 0;            // Current slice size based on trigger interval
+        int numRemainingSamplesInSlice = 0;  // Countdown for current slice
+        bool synchronized = false;            // True when trigger interval is valid
 
-        // Option 3: POSITION slice subdivision
+        // === Clock divider (1x to 8x) ===
+        static constexpr int numClockDividers = 6;
+        std::array<int, numClockDividers> clockDividerValues = {1, 2, 4, 8, 16, 32};
+        int clockDividerIndex = 0;
+
+        // === Pitch modes (Kammerl-style) ===
+        enum PitchMode {
+            PITCH_FIXED = 0,      // Constant speed
+            PITCH_DECREASING,     // Slows down over slice
+            PITCH_INCREASING,     // Speeds up over slice
+            PITCH_SCRATCH,        // Sinusoidal speed modulation
+            PITCH_REVERSED        // Reverse playback
+        };
+        PitchMode pitchMode = PITCH_FIXED;
+        float basePitchSpeed = 1.0f;  // Base playback speed from PITCH knob
+
+        // === Loop points (Kammerl-style quantized positions) ===
+        static constexpr int numLoopPositions = 9;
+        std::array<float, numLoopPositions> loopPositions = {0.0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1.0f};
+        float loopBeginPercent = 0.0f;
+        float loopEndPercent = 1.0f;
+        int loopBeginSamples = 0;
+        int loopEndSamples = 0;
+
+        // === Size modulation (shrinking loop) ===
+        bool sizeModulationEnabled = false;
+        float sizeModulationAmount = 0.0f;  // How much to shrink
+
+        // === Slice modulation patterns ===
+        enum SlicePattern {
+            SLICE_SEQUENTIAL = 0,  // 1, 2, 3, 4...
+            SLICE_ALTERNATING,     // 1, 2, 1, 2...
+            SLICE_RANDOM,          // Random selection
+            SLICE_PINGPONG         // 1, 2, 3, 2, 1...
+        };
+        SlicePattern slicePattern = SLICE_SEQUENTIAL;
         int numSlices = 1;
         int currentSlice = 0;
-        std::array<int, 16> sliceOrder = {};  // Randomized slice playback order
+        int sliceDirection = 1;  // For ping-pong
 
-        // Option 4: TRIG capture modes (0=Repeat, 1=Gate, 2=Reverse)
-        int triggerMode = 0;
-        bool triggerHeld = false;
-        float triggerHoldTime = 0.0f;
+        // === Probability-based trigger ===
+        float triggerProbability = 1.0f;  // 0.0 to 1.0
 
-        // Option 5: Envelope shaping
+        // === Envelope shaping ===
         float envelopePhase = 0.0f;
-        float attackTime = 0.005f;   // 5ms attack
-        float releaseTime = 0.01f;   // 10ms release
+        float attackTime = 0.002f;   // 2ms attack
+        float releaseTime = 0.005f;  // 5ms release
         std::vector<float> crossfadeBufferL;
         std::vector<float> crossfadeBufferR;
         bool hasPreviousCapture = false;
+
+        // === Alternating direction (bidirectional loop) ===
+        bool alternatingEnabled = false;
+        bool playingForward = true;
+
+        // RNG for probability and slice randomization
+        std::mt19937 rng{std::random_device{}()};
     };
     BeatRepeatState beatRepeat;
 
