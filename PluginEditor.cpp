@@ -48,7 +48,6 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setupKnob (modeKnob, "Mode", modeLookAndFeel.get());
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 22);
-    modeKnob.slider.setNumDecimalPlacesToDisplay(0);  // Display integers only
 
     // Custom text display for MODE: Show mode names instead of numbers
     modeKnob.slider.textFromValueFunction = [](double value)
