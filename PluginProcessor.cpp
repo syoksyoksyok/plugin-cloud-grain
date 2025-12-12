@@ -150,7 +150,8 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     correlatorUpdateCounter.store(0);
 
     // Initialize Spectral mode state
-    spectralInputPos = 0;
+    spectralHopCounter = 0;
+    spectralBlockSize = 0;
     spectralOutputPos = 0;
     spectralOutputL.fill(0.0f);
     spectralOutputR.fill(0.0f);
@@ -636,7 +637,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             spectralOutputR.fill(0.0f);
             fftDataL.fill(0.0f);
             fftDataR.fill(0.0f);
-            spectralInputPos = 0;
+            spectralHopCounter = 0;
+            spectralBlockSize = 0;
             spectralOutputPos = 0;
         }
     }
@@ -1143,18 +1145,18 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== SPECTRAL MODE (Block Processing) ==========
+    // ========== SPECTRAL MODE (Clouds STFT-style) ==========
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
     float pitchRatio = pitchToRatio(pitch);
-    const int hopSize = fftSize >> 2;  // OPTIMIZED: Division by 4 using bit shift
+    const int hopSize = fftSize >> 2;  // OPTIMIZED: Division by 4 using bit shift (512 samples)
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Force FFT frame update (Clouds TRIG behavior)
-        // Reset input position to trigger fresh spectral analysis
+        // TRIG input: Force FFT frame reset (Clouds TRIG behavior)
         if (i == 0 && triggerReceived.load())
         {
-            spectralInputPos = 0;
+            spectralHopCounter = 0;
+            spectralBlockSize = 0;
             spectralOutputPos = 0;
             triggerReceived.store(false);
         }
@@ -1162,6 +1164,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
+        // Write input to ring buffer with feedback
         if (!freeze && bufferSize > 0)
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
@@ -1169,26 +1172,28 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        // Fill FFT input buffer from ring buffer
-        if (spectralInputPos < fftSize)
+        // Increment hop counter and block size
+        spectralHopCounter++;
+        spectralBlockSize++;
+
+        // Process FFT every hopSize samples (Clouds STFT style)
+        if (spectralBlockSize >= hopSize)
         {
+            spectralBlockSize = 0;  // Reset for next hop
+
+            // Read fftSize samples from ring buffer (sliding window approach)
             double readDelay = position * (bufferSize - fftSize);
-            int readPos = static_cast<int>(writeHead - readDelay - spectralInputPos);
-            if (readPos < 0) readPos += bufferSize;
-            readPos = readPos & bufferSizeMask;  // OPTIMIZED: Bit mask
+            int readStart = static_cast<int>(writeHead - readDelay - fftSize);
+            if (readStart < 0) readStart += bufferSize;
 
-            // Apply Hann window during input (OPTIMIZED: LUT)
-            float window = hannWindow(spectralInputPos, fftSize);
-            fftDataL[spectralInputPos] = ringBuffer.getSample(0, readPos) * window;
-            fftDataR[spectralInputPos] = ringBuffer.getSample(1, readPos) * window;
-
-            spectralInputPos++;
-        }
-
-        // Process FFT when we have a full window
-        if (spectralInputPos >= fftSize)
-        {
-            spectralInputPos = 0;
+            // Fill FFT buffer with windowed samples from ring buffer
+            for (int n = 0; n < fftSize; ++n)
+            {
+                int readPos = (readStart + n) & bufferSizeMask;  // OPTIMIZED: Bit mask
+                float window = hannWindow(n, fftSize);
+                fftDataL[n] = ringBuffer.getSample(0, readPos) * window;
+                fftDataR[n] = ringBuffer.getSample(1, readPos) * window;
+            }
 
             // Zero pad the second half for complex FFT (OPTIMIZED: Use std::fill)
             std::fill(fftDataL.begin() + fftSize, fftDataL.end(), 0.0f);
@@ -1225,8 +1230,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
 
             // Overlap-Add: accumulate to output buffer with Hann window (OPTIMIZED: LUT)
             // Gain compensation for 75% overlap (hopSize = fftSize/4)
-            // Increased gain to compensate for window attenuation and overlap
-            float normGain = 4.0f / fftSize;  // Increased from 2.0f
+            float normGain = 4.0f / fftSize;  // Compensate for windowing
             for (int n = 0; n < fftSize; ++n)
             {
                 float window = hannWindow(n, fftSize);
@@ -1234,16 +1238,14 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
                 spectralOutputL[n] += spectralShiftedL[n] * normGain * window;
                 spectralOutputR[n] += spectralShiftedR[n] * normGain * window;
             }
-
-            spectralOutputPos = 0;
         }
 
-        // Output from spectral buffer with proper overlap-add handling
+        // Output from spectral buffer
         if (spectralOutputPos < fftSize)
         {
             // Output with additional gain boost for audible results
-            wetL[i] = spectralOutputL[spectralOutputPos] * 2.5f;
-            wetR[i] = spectralOutputR[spectralOutputPos] * 2.5f;
+            wetL[i] = spectralOutputL[spectralOutputPos] * 3.0f;
+            wetR[i] = spectralOutputR[spectralOutputPos] * 3.0f;
 
             spectralOutputPos++;
 
@@ -1267,9 +1269,9 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
         else
         {
-            // Fallback: pass through input with slight attenuation
-            wetL[i] = inSampleL * 0.3f;
-            wetR[i] = inSampleR * 0.3f;
+            // Fallback: pass through input (initial buffer fill)
+            wetL[i] = inSampleL * 0.5f;
+            wetR[i] = inSampleR * 0.5f;
         }
     }
 }
