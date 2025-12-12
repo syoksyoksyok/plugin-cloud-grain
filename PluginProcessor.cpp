@@ -170,6 +170,39 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     wsolaEnvIncrement = 0.0f;
     wsolaElapsed = 0;
 
+    // Initialize Looping mode state (Clouds-style with improvements)
+    loopReadPos = 0.0;
+    loopStartPos = 0;
+    loopEndPos = 0;
+    loopLength = 0;
+    previousLoopLength = 0;
+
+    // Option 1: Crossfade
+    loopCrossfadeActive = false;
+
+    // Option 2: Loop capture with envelope
+    int maxLoopCaptureSize = static_cast<int>(sampleRate * 2.0);  // 2 seconds max
+    loopCaptureBufferL.resize(maxLoopCaptureSize, 0.0f);
+    loopCaptureBufferR.resize(maxLoopCaptureSize, 0.0f);
+    loopCaptureLength = 0;
+    loopUseCaptured = false;
+    loopEnvPhase = 1.0f;  // Start fully open
+    loopEnvIncrement = 0.0f;
+
+    // Option 3: Feedback filter
+    loopFeedbackFilter.previousL = 0.0f;
+    loopFeedbackFilter.previousR = 0.0f;
+
+    // Option 4: Multi-tap delay
+    for (int t = 0; t < maxLoopTaps; ++t)
+    {
+        loopTaps[t].readPos = 0.0;
+        // Initialize stereo panning for each tap
+        float angle = (static_cast<float>(t) / maxLoopTaps) * juce::MathConstants<float>::pi;
+        loopTaps[t].panL = std::cos(angle);
+        loopTaps[t].panR = std::sin(angle);
+    }
+
     // Initialize Oliverb taps (multi-tap delay with modulation)
     const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
     for (size_t i = 0; i < oliverbTaps.size(); ++i)
@@ -731,7 +764,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         case MODE_LOOPING:
             processLoopingBlock (buffer, numSamples, wetL, wetR,
-                                 position, size, pitch, effectiveFeedback, freeze);
+                                 position, size, pitch, density, texture,
+                                 effectiveFeedback, freeze);
             break;
 
         case MODE_SPECTRAL:
@@ -1158,53 +1192,131 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
 void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                                                       float* wetL, float* wetR,
                                                       float position, float size, float pitch,
+                                                      float density, float texture,
                                                       float feedback, bool freeze)
 {
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== LOOPING MODE (Block Processing) ==========
-    // OPTIMIZATION: Calculate loop parameters once per block (OPTIMIZED: Bit shift)
-    int targetLoopLength = static_cast<int>(size * currentSampleRate);
-    targetLoopLength = juce::jlimit(1024, bufferSize >> 1, targetLoopLength);  // OPTIMIZED: Division by 2
+    // ========== LOOPING MODE (Clouds-style with improvements) ==========
+    // Improvements:
+    // 1. Loop boundary crossfade for smooth seamless loops
+    // 2. TRIG loop capture with envelope (Clouds-style)
+    // 3. TEXTURE feedback filtering (Clouds-style)
+    // 4. DENSITY multi-tap delay (SuperParasites-style)
+    //
+    // SIZE: Loop length
+    // POSITION: Loop buffer position/delay
+    // PITCH: Loop playback speed
+    // DENSITY: Number of loop taps (1-4)
+    // TEXTURE: Feedback filter brightness
 
-    // Smooth loop length changes to prevent clicks (linear interpolation per sample)
+    // OPTIMIZATION: Calculate loop parameters once per block
+    int targetLoopLength = static_cast<int>(size * currentSampleRate);
+    targetLoopLength = juce::jlimit(1024, bufferSize >> 1, targetLoopLength);
+
+    // Smooth loop length changes to prevent clicks
     if (previousLoopLength == 0)
         previousLoopLength = targetLoopLength;
 
     // Detect significant loop length changes and reset read position safely
     int lengthDifference = std::abs(targetLoopLength - previousLoopLength);
-    if (lengthDifference > 512)  // Significant change threshold
+    if (lengthDifference > 512)
     {
-        // Reset loop read position proportionally to avoid clicks
         if (previousLoopLength > 0 && loopReadPos > 0)
-        {
-            // Scale read position to new loop length
             loopReadPos = (loopReadPos / previousLoopLength) * targetLoopLength;
-        }
     }
 
     float pitchRatio = pitchToRatio(pitch);
 
+    // Option 4: Calculate number of taps based on DENSITY
+    int numTaps = 1 + static_cast<int>(density * (maxLoopTaps - 1));
+    numTaps = juce::jlimit(1, maxLoopTaps, numTaps);
+
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Extract grain from loop (Clouds TRIG behavior)
-        // Generate a short burst/grain from the loop at a position based on POSITION parameter
+        // === Option 2: TRIG loop capture with envelope (Clouds-style) ===
         if (i == 0 && triggerReceived.load())
         {
-            // Use POSITION to determine where in the loop to extract grain
-            loopReadPos = position * loopLength;
             triggerReceived.store(false);
+
+            // Capture current loop segment to dedicated buffer
+            loopCaptureLength = juce::jmin(targetLoopLength, static_cast<int>(loopCaptureBufferL.size()));
+
+            // Calculate capture start position
+            double delayTime = position * (bufferSize - loopCaptureLength);
+            int captureStart = writeHead - static_cast<int>(delayTime) - loopCaptureLength;
+            while (captureStart < 0) captureStart += bufferSize;
+
+            // Capture loop segment with crossfade at boundaries for seamless loop
+            for (int n = 0; n < loopCaptureLength; ++n)
+            {
+                int readIdx = (captureStart + n) & bufferSizeMask;
+                loopCaptureBufferL[n] = ringBuffer.getSample(0, readIdx);
+                loopCaptureBufferR[n] = ringBuffer.getSample(1, readIdx);
+            }
+
+            // Switch to captured loop playback
+            loopUseCaptured = true;
+
+            // Start envelope ramp (smooth fade-in)
+            loopEnvPhase = 0.0f;
+            loopEnvIncrement = 1.0f / (loopCaptureLength * 0.1f);  // 10% fade-in
+
+            // Reset read position
+            loopReadPos = 0.0;
+        }
+
+        // Update envelope phase
+        if (loopEnvPhase < 1.0f)
+        {
+            loopEnvPhase += loopEnvIncrement;
+            if (loopEnvPhase > 1.0f) loopEnvPhase = 1.0f;
         }
 
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
-        // Smoothly interpolate loop length per sample to prevent clicks
+        // === Option 3: TEXTURE feedback filtering (Clouds-style) ===
+        // TEXTURE < 0.5: Low-pass filter (dark feedback)
+        // TEXTURE > 0.5: High-pass filter (bright feedback)
+        float filterCoeff = 0.1f + texture * 0.8f;  // 0.1 to 0.9
+
+        float feedbackL = wetL[i] * feedback;
+        float feedbackR = wetR[i] * feedback;
+
+        if (texture < 0.5f)
+        {
+            // Low-pass filter for dark feedback
+            float lpAmount = 1.0f - (texture * 2.0f);  // 1.0 at texture=0, 0.0 at texture=0.5
+            feedbackL = feedbackL * (1.0f - lpAmount) + loopFeedbackFilter.previousL * lpAmount;
+            feedbackR = feedbackR * (1.0f - lpAmount) + loopFeedbackFilter.previousR * lpAmount;
+        }
+        else
+        {
+            // High-pass filter for bright feedback
+            float hpAmount = (texture - 0.5f) * 2.0f;  // 0.0 at texture=0.5, 1.0 at texture=1.0
+            feedbackL = feedbackL - loopFeedbackFilter.previousL * hpAmount;
+            feedbackR = feedbackR - loopFeedbackFilter.previousR * hpAmount;
+        }
+
+        loopFeedbackFilter.previousL = feedbackL;
+        loopFeedbackFilter.previousR = feedbackR;
+
+        // Write to ring buffer with filtered feedback
+        if (!freeze && bufferSize > 0)
+        {
+            ringBuffer.setSample(0, writeHead, inSampleL + feedbackL);
+            ringBuffer.setSample(1, writeHead, inSampleR + feedbackR);
+            writeHead = (writeHead + 1) & bufferSizeMask;
+        }
+
+        // Smoothly interpolate loop length per sample
         float t = static_cast<float>(i) / numSamples;
         loopLength = static_cast<int>(previousLoopLength + t * (targetLoopLength - previousLoopLength));
-        loopLength = juce::jmax(1024, loopLength);  // Ensure minimum loop length
+        loopLength = juce::jmax(1024, loopLength);
 
+        // Calculate loop boundaries
         double delayTime = position * (bufferSize - loopLength);
         loopEndPos = writeHead - static_cast<int>(delayTime);
         if (loopEndPos < 0) loopEndPos += bufferSize;
@@ -1212,40 +1324,114 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         loopStartPos = loopEndPos - loopLength;
         if (loopStartPos < 0) loopStartPos += bufferSize;
 
-        if (!freeze && bufferSize > 0)
+        // === Option 4: DENSITY multi-tap delay (SuperParasites-style) ===
+        float outputL = 0.0f;
+        float outputR = 0.0f;
+
+        for (int tap = 0; tap < numTaps; ++tap)
         {
-            ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            // Calculate tap offset (evenly distributed across loop)
+            float tapPhase = static_cast<float>(tap) / numTaps;
+            double tapReadPos = loopReadPos + tapPhase * loopLength;
+
+            // Wrap tap read position
+            while (tapReadPos >= loopLength) tapReadPos -= loopLength;
+            while (tapReadPos < 0) tapReadPos += loopLength;
+
+            float tapOutL = 0.0f;
+            float tapOutR = 0.0f;
+
+            if (loopUseCaptured && loopCaptureLength > 0)
+            {
+                // Read from captured loop buffer
+                int captureReadPos = static_cast<int>(tapReadPos) % loopCaptureLength;
+                if (captureReadPos < 0) captureReadPos += loopCaptureLength;
+
+                // === Option 1: Loop boundary crossfade (for captured loops) ===
+                float distanceToEnd = loopCaptureLength - tapReadPos;
+                if (distanceToEnd < loopCrossfadeLength && distanceToEnd >= 0)
+                {
+                    // Crossfade region near loop end
+                    float blend = distanceToEnd / loopCrossfadeLength;
+                    int wrapReadPos = static_cast<int>(tapReadPos - loopCaptureLength);
+                    if (wrapReadPos < 0) wrapReadPos += loopCaptureLength;
+
+                    float endSampleL = loopCaptureBufferL[captureReadPos];
+                    float endSampleR = loopCaptureBufferR[captureReadPos];
+                    float startSampleL = loopCaptureBufferL[wrapReadPos];
+                    float startSampleR = loopCaptureBufferR[wrapReadPos];
+
+                    tapOutL = endSampleL * blend + startSampleL * (1.0f - blend);
+                    tapOutR = endSampleR * blend + startSampleR * (1.0f - blend);
+                }
+                else
+                {
+                    // Normal playback
+                    tapOutL = loopCaptureBufferL[captureReadPos];
+                    tapOutR = loopCaptureBufferR[captureReadPos];
+                }
+            }
+            else
+            {
+                // Read from live ring buffer
+                double readPosFloat = loopStartPos + tapReadPos;
+
+                // Wrap position to loop boundaries
+                if (readPosFloat >= loopEndPos || readPosFloat < loopStartPos)
+                {
+                    double offset = readPosFloat - loopStartPos;
+                    offset = std::fmod(offset, static_cast<double>(loopLength));
+                    if (offset < 0) offset += loopLength;
+                    readPosFloat = loopStartPos + offset;
+                }
+
+                // === Option 1: Loop boundary crossfade (for live loops) ===
+                float distanceToEnd = loopLength - tapReadPos;
+                if (distanceToEnd < loopCrossfadeLength && distanceToEnd >= 0)
+                {
+                    float blend = distanceToEnd / loopCrossfadeLength;
+                    double wrapReadPos = loopStartPos;
+
+                    float endSampleL = getSampleFromRing(0, readPosFloat);
+                    float endSampleR = getSampleFromRing(1, readPosFloat);
+                    float startSampleL = getSampleFromRing(0, wrapReadPos);
+                    float startSampleR = getSampleFromRing(1, wrapReadPos);
+
+                    tapOutL = endSampleL * blend + startSampleL * (1.0f - blend);
+                    tapOutR = endSampleR * blend + startSampleR * (1.0f - blend);
+                }
+                else
+                {
+                    tapOutL = getSampleFromRing(0, readPosFloat);
+                    tapOutR = getSampleFromRing(1, readPosFloat);
+                }
+            }
+
+            // Apply tap panning
+            outputL += tapOutL * loopTaps[tap].panL;
+            outputR += tapOutR * loopTaps[tap].panR;
         }
 
-        // Wrap loopReadPos to valid range using fmod (safe for all values)
+        // Normalize by number of active taps
+        float tapNormalization = 1.0f / std::sqrt(static_cast<float>(numTaps));
+        outputL *= tapNormalization;
+        outputR *= tapNormalization;
+
+        // Apply envelope (Option 2: smooth trigger response)
+        float envelopeGain = 0.2f + loopEnvPhase * 0.8f;  // Fade in during trigger
+
+        wetL[i] = outputL * envelopeGain;
+        wetR[i] = outputR * envelopeGain;
+
+        // Advance read position
+        loopReadPos += pitchRatio;
+
+        // Wrap read position
         if (loopReadPos >= loopLength || loopReadPos < 0)
         {
             loopReadPos = std::fmod(loopReadPos, static_cast<double>(loopLength));
             if (loopReadPos < 0) loopReadPos += loopLength;
         }
-
-        // Use floating-point position for smooth interpolation (via getSampleFromRing)
-        double readPosFloat = loopStartPos + loopReadPos;
-
-        // Wrap position to loop boundaries using fmod (OPTIMIZED: safer than while loops)
-        if (readPosFloat >= loopEndPos || readPosFloat < loopStartPos)
-        {
-            double offset = readPosFloat - loopStartPos;
-            offset = std::fmod(offset, static_cast<double>(loopLength));
-            if (offset < 0) offset += loopLength;
-            readPosFloat = loopStartPos + offset;
-        }
-
-        // getSampleFromRing handles interpolation and buffer wrapping
-        float outL = getSampleFromRing(0, readPosFloat);
-        float outR = getSampleFromRing(1, readPosFloat);
-
-        wetL[i] = outL;
-        wetR[i] = outR;
-
-        loopReadPos += pitchRatio;
     }
 
     // Store current loop length for next block
