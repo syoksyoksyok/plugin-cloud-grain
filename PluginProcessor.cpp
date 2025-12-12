@@ -1742,7 +1742,9 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
 
         // Output from spectral buffer
-        if (spectralOutputPos < fftSize && spectralHopCounter >= fftSize)
+        // Wait for at least one FFT frame to be processed before outputting
+        // (requires hopCounter >= fftSize + hopSize to ensure buffer has valid data)
+        if (spectralOutputPos < fftSize && spectralHopCounter >= (fftSize + hopSize))
         {
             wetL[i] = spectralOutputL[spectralOutputPos] * 3.0f;
             wetR[i] = spectralOutputR[spectralOutputPos] * 3.0f;
@@ -1767,6 +1769,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
         else
         {
+            // Pass through input during initial buffer fill
             wetL[i] = inSampleL * 0.5f;
             wetR[i] = inSampleR * 0.5f;
         }
