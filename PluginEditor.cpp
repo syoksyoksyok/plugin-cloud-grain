@@ -210,10 +210,10 @@ void CloudLikeGranularEditor::timerCallback()
     juce::String modeValueText;
     switch (mode)
     {
-        case 0: modeValueText = "Granular"; break;
-        case 1: modeValueText = "PitchShft"; break;
-        case 2: modeValueText = "Looping"; break;
-        case 3: modeValueText = "Spectral"; break;
+        case 0: modeValueText = "GranProc"; break;  // Granular Processor
+        case 1: modeValueText = "Pitch/Time"; break;  // Pitch Shifter / Time Shifter
+        case 2: modeValueText = "LoopDly"; break;  // Looping Delay
+        case 3: modeValueText = "SpctrlMad"; break;  // Spectral Madness
         case 4: modeValueText = "Oliverb"; break;
         case 5: modeValueText = "Resonstr"; break;
         case 6: modeValueText = "BeatRpt"; break;
