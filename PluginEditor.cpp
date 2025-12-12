@@ -49,35 +49,6 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 80, 22);  // Set to read-only
 
-    // Custom text display for MODE: Show mode names instead of numbers
-    modeKnob.slider.textFromValueFunction = [](double value)
-    {
-        int mode = static_cast<int>(value);
-        switch (mode)
-        {
-            case 0: return juce::String("Granular");
-            case 1: return juce::String("PitchShft");
-            case 2: return juce::String("Looping");
-            case 3: return juce::String("Spectral");
-            case 4: return juce::String("Oliverb");
-            case 5: return juce::String("Resonstr");
-            case 6: return juce::String("BeatRpt");
-            default: return juce::String("Unknown");
-        }
-    };
-
-    modeKnob.slider.valueFromTextFunction = [](const juce::String& text)
-    {
-        if (text == "Granular")   return 0.0;
-        if (text == "PitchShft")  return 1.0;
-        if (text == "Looping")    return 2.0;
-        if (text == "Spectral")   return 3.0;
-        if (text == "Oliverb")    return 4.0;
-        if (text == "Resonstr")   return 5.0;
-        if (text == "BeatRpt")    return 6.0;
-        return 0.0;  // Default to Granular
-    };
-
     setupKnob (positionKnob, "Position", positionLookAndFeel.get());
     setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
     setupKnob (pitchKnob,    "Pitch",    pitchLookAndFeel.get());
@@ -182,6 +153,39 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
     trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
+
+    // Custom text display for MODE: Show mode names instead of numbers
+    // IMPORTANT: Set this AFTER creating the attachment
+    modeKnob.slider.textFromValueFunction = [](double value)
+    {
+        int mode = static_cast<int>(value);
+        switch (mode)
+        {
+            case 0: return juce::String("Granular");
+            case 1: return juce::String("PitchShft");
+            case 2: return juce::String("Looping");
+            case 3: return juce::String("Spectral");
+            case 4: return juce::String("Oliverb");
+            case 5: return juce::String("Resonstr");
+            case 6: return juce::String("BeatRpt");
+            default: return juce::String("Unknown");
+        }
+    };
+
+    modeKnob.slider.valueFromTextFunction = [](const juce::String& text)
+    {
+        if (text == "Granular")   return 0.0;
+        if (text == "PitchShft")  return 1.0;
+        if (text == "Looping")    return 2.0;
+        if (text == "Spectral")   return 3.0;
+        if (text == "Oliverb")    return 4.0;
+        if (text == "Resonstr")   return 5.0;
+        if (text == "BeatRpt")    return 6.0;
+        return 0.0;  // Default to Granular
+    };
+
+    // Force update the display
+    modeKnob.slider.updateText();
 }
 
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
