@@ -362,6 +362,18 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     beatRepeat.crossfadeBufferL.resize(beatRepeatSize, 0.0f);
     beatRepeat.crossfadeBufferR.resize(beatRepeatSize, 0.0f);
     beatRepeat.hasPreviousCapture = false;
+
+    // Initialize Spectral Clouds state (SuperParasites-style)
+    spectralClouds.currentGain.fill(1.0f);  // Start with all bands at full gain
+    spectralClouds.targetGain.fill(1.0f);
+    spectralClouds.frozenMagnitudeL.fill(0.0f);
+    spectralClouds.frozenMagnitudeR.fill(0.0f);
+    spectralClouds.phaseL.fill(0.0f);
+    spectralClouds.phaseR.fill(0.0f);
+    spectralClouds.frozen = false;
+    spectralClouds.numFreqBands = 16;  // Default to 16 bands
+    spectralClouds.parameterLowpass = 0.1f;
+    spectralClouds.previousTrigger = false;
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -923,6 +935,12 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             processBeatRepeatBlock (buffer, numSamples, wetL, wetR,
                                     position, size, pitch, density, texture,
                                     effectiveFeedback, freeze);
+            break;
+
+        case MODE_SPECTRAL_CLOUDS:
+            processSpectralCloudsBlock (buffer, numSamples, wetL, wetR,
+                                        position, size, pitch, density, texture,
+                                        effectiveFeedback, freeze);
             break;
 
         default:
@@ -2495,6 +2513,187 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         {
             wetL[i] = 0.0f;
             wetR[i] = 0.0f;
+        }
+    }
+}
+
+void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                                             float* wetL, float* wetR,
+                                                             float position, float size, float pitch,
+                                                             float density, float texture,
+                                                             float feedback, bool freeze)
+{
+    // SuperParasites Spectral Clouds implementation
+    // Reference: supercell/dsp/pvoc/spectral_clouds_transformation.cc
+
+    // Parameter mapping from SuperParasites
+    float densityThreshold = position;  // 0.0-1.0: Band muting threshold
+    int numFreqBands = std::clamp(static_cast<int>(4 + size * 60.0f), 4, maxSpectralCloudsBands);  // 4-64 bands
+    float parameterLowpass = 0.001f + density * 0.199f;  // 0.001-0.2: Gain smoothing coefficient
+    float phaseRandomization = texture;  // 0.0-1.0: Phase noise amount
+
+    // Update state
+    spectralClouds.numFreqBands = numFreqBands;
+    spectralClouds.parameterLowpass = parameterLowpass;
+    spectralClouds.frozen = freeze;
+
+    // Trigger detection: regenerate random band gains on trigger edge
+    bool currentTrigger = triggerReceived.load();
+    if (currentTrigger && !spectralClouds.previousTrigger)
+    {
+        // Rising edge: regenerate random target gains for each band
+        std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+        for (int b = 0; b < maxSpectralCloudsBands; ++b)
+        {
+            spectralClouds.targetGain[b] = dist(rng);
+        }
+    }
+    spectralClouds.previousTrigger = currentTrigger;
+
+    // Smooth current gains toward target gains
+    for (int b = 0; b < maxSpectralCloudsBands; ++b)
+    {
+        spectralClouds.currentGain[b] += (spectralClouds.targetGain[b] - spectralClouds.currentGain[b]) * parameterLowpass;
+    }
+
+    // STFT processing with 75% overlap (hopSize = fftSize/4)
+    const int hopSize = fftSize / 4;
+    const float sqrt2Compensation = std::sqrt(2.0f);
+
+    // Phase randomization distribution
+    std::uniform_real_distribution<float> phaseDist(-juce::MathConstants<float>::pi,
+                                                      juce::MathConstants<float>::pi);
+
+    // Process both channels
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        float* output = (ch == 0) ? wetL : wetR;
+        auto* frozenMagnitude = (ch == 0) ? &spectralClouds.frozenMagnitudeL : &spectralClouds.frozenMagnitudeR;
+        auto* phaseArray = (ch == 0) ? &spectralClouds.phaseL : &spectralClouds.phaseR;
+
+        // Initialize output to zero
+        for (int i = 0; i < numSamples; ++i)
+            output[i] = 0.0f;
+
+        // STFT frame processing
+        int numFrames = (numSamples + hopSize - 1) / hopSize;
+
+        for (int frame = 0; frame < numFrames; ++frame)
+        {
+            int frameStart = frame * hopSize;
+            int frameSamples = std::min(hopSize, numSamples - frameStart);
+
+            // Fill FFT buffer with input (zero-padded if needed)
+            for (int i = 0; i < fftSize; ++i)
+            {
+                int sampleIdx = frameStart + i;
+                if (sampleIdx < numSamples)
+                {
+                    // Apply Hann window
+                    float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (fftSize - 1)));
+                    fftData[i] = buffer.getSample(ch, sampleIdx) * window;
+                }
+                else
+                {
+                    fftData[i] = 0.0f;
+                }
+            }
+
+            // Perform forward FFT
+            fft->performRealOnlyForwardTransform(fftData.data());
+
+            // Process frequency bins (only up to Nyquist)
+            for (int bin = 0; bin < fftSize / 2; ++bin)
+            {
+                float real = fftData[bin * 2];
+                float imag = fftData[bin * 2 + 1];
+
+                // Convert to polar coordinates
+                float magnitude = std::sqrt(real * real + imag * imag);
+                float phase = std::atan2(imag, real);
+
+                // Freeze or update magnitude
+                if (freeze)
+                {
+                    if (spectralClouds.frozen)
+                    {
+                        // Use frozen magnitude
+                        magnitude = (*frozenMagnitude)[bin];
+                    }
+                    else
+                    {
+                        // First frame of freeze: store current magnitude
+                        (*frozenMagnitude)[bin] = magnitude;
+                    }
+                }
+
+                // Apply √2 gain compensation (SuperParasites: compensates for window overlap)
+                magnitude *= sqrt2Compensation;
+
+                // Add phase randomization
+                if (phaseRandomization > 0.0f)
+                {
+                    float phaseNoise = phaseDist(rng) * phaseRandomization;
+                    phase += phaseNoise;
+                }
+
+                // Store phase for continuity
+                (*phaseArray)[bin] = phase;
+
+                // Calculate logarithmic band assignment
+                // SuperParasites formula: band = log2(bin+1) / log2(fftSize/2) * numBands
+                float binFloat = static_cast<float>(bin + 1);
+                float maxBin = static_cast<float>(fftSize / 2);
+                int band = static_cast<int>((std::log2(binFloat) / std::log2(maxBin)) * numFreqBands);
+                band = std::clamp(band, 0, numFreqBands - 1);
+
+                // Apply band gain or mute if below density threshold
+                float bandGain = spectralClouds.currentGain[band];
+                if (bandGain < densityThreshold)
+                {
+                    magnitude = 0.0f;  // Mute this bin
+                }
+                else
+                {
+                    magnitude *= bandGain;  // Apply band gain
+                }
+
+                // Convert back to rectangular coordinates
+                fftData[bin * 2] = magnitude * std::cos(phase);
+                fftData[bin * 2 + 1] = magnitude * std::sin(phase);
+            }
+
+            // Mirror the spectrum for IFFT (conjugate symmetry)
+            for (int bin = fftSize / 2; bin < fftSize; ++bin)
+            {
+                int mirrorBin = fftSize - bin;
+                fftData[bin * 2] = fftData[mirrorBin * 2];
+                fftData[bin * 2 + 1] = -fftData[mirrorBin * 2 + 1];  // Conjugate
+            }
+
+            // Perform inverse FFT
+            fft->performRealOnlyInverseTransform(fftData.data());
+
+            // Overlap-add to output buffer with Hann window
+            for (int i = 0; i < fftSize && (frameStart + i) < numSamples; ++i)
+            {
+                float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (fftSize - 1)));
+                output[frameStart + i] += fftData[i] * window * 0.5f;  // 0.5f: normalize for overlap
+            }
+        }
+    }
+
+    // Apply feedback (mix previous output back into input buffer for next iteration)
+    if (feedback > 0.001f)
+    {
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float feedbackGain = feedback * 0.98f;  // Slight attenuation to prevent runaway
+            if (i < buffer.getNumSamples())
+            {
+                buffer.setSample(0, i, buffer.getSample(0, i) * (1.0f - feedbackGain) + wetL[i] * feedbackGain);
+                buffer.setSample(1, i, buffer.getSample(1, i) * (1.0f - feedbackGain) + wetR[i] * feedbackGain);
+            }
         }
     }
 }

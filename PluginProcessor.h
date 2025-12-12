@@ -93,7 +93,8 @@ private:
         MODE_SPECTRAL = 3,
         MODE_OLIVERB = 4,        // Parasites: Creative reverb mode
         MODE_RESONESTOR = 5,     // Parasites: Polyphonic resonator (Karplus-Strong)
-        MODE_BEAT_REPEAT = 6     // Parasites: Beat repeat/stutter effect
+        MODE_BEAT_REPEAT = 6,    // Parasites: Beat repeat/stutter effect
+        MODE_SPECTRAL_CLOUDS = 7 // SuperParasites: Spectral clouds with random band filtering
     };
 
     // Correlator for pitch detection and grain alignment (Clouds-style)
@@ -482,6 +483,30 @@ private:
     };
     BeatRepeatState beatRepeat;
 
+    // Spectral Clouds mode state (SuperParasites-style)
+    static constexpr int maxSpectralCloudsBands = 64;  // Maximum frequency bands
+    struct SpectralCloudsState
+    {
+        // Frequency band gain control
+        alignas(32) std::array<float, maxSpectralCloudsBands> currentGain;  // Current band gains
+        alignas(32) std::array<float, maxSpectralCloudsBands> targetGain;   // Target band gains
+
+        // Frozen spectral data (magnitude only, phase is randomized)
+        alignas(32) std::array<float, fftSize> frozenMagnitudeL;
+        alignas(32) std::array<float, fftSize> frozenMagnitudeR;
+
+        // Phase arrays for randomization
+        alignas(32) std::array<float, fftSize> phaseL;
+        alignas(32) std::array<float, fftSize> phaseR;
+
+        // Processing state
+        bool frozen = false;
+        int numFreqBands = 16;  // Current number of frequency bands (4-64)
+        float parameterLowpass = 0.1f;  // Smoothing coefficient for gain changes
+        bool previousTrigger = false;  // For trigger edge detection
+    };
+    SpectralCloudsState spectralClouds;
+
     std::atomic<float> lastRandomizeValue { 0.0f };
     std::atomic<int> previousMode { 0 };  // Track mode changes for cleanup
 
@@ -558,6 +583,12 @@ private:
                                  float position, float size, float pitch,
                                  float density, float texture,
                                  float feedback, bool freeze);
+
+    void processSpectralCloudsBlock (juce::AudioBuffer<float>& buffer, int numSamples,
+                                     float* wetL, float* wetR,
+                                     float position, float size, float pitch,
+                                     float density, float texture,
+                                     float feedback, bool freeze);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularProcessor)
 };
