@@ -475,9 +475,10 @@ void CloudLikeGranularEditor::timerCallback()
         }
     }
 
-    // Update tap tempo BPM display
-    float detectedBPM = processor.detectedTapBPM.load();
-    juce::String bpmText = detectedBPM > 0.0f ? juce::String(static_cast<int>(detectedBPM)) : "---";
+    // Update BPM display (Auto mode: DAW BPM, Manual mode: tap tempo BPM)
+    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    float displayBPM = trigMode ? processor.hostBPM.load() : processor.detectedTapBPM.load();
+    juce::String bpmText = displayBPM > 0.0f ? juce::String(static_cast<int>(displayBPM)) : "---";
     if (tapBpmLabel.getText() != bpmText)
     {
         tapBpmLabel.setText (bpmText, juce::dontSendNotification);

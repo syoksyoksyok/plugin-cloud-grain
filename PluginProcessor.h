@@ -58,6 +58,9 @@ public:
     std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
     std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
 
+    // Host BPM (public for UI access in Auto mode)
+    std::atomic<float> hostBPM { 0.0f };  // BPM from DAW (Auto mode)
+
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     // Grain structure (public for potential visualization)

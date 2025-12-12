@@ -730,6 +730,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             if (posInfo.hasValue() && posInfo->getBpm().hasValue())
             {
                 double bpm = *posInfo->getBpm();
+                hostBPM.store(static_cast<float>(bpm));  // Store for UI display
                 float trigRate = apvts.getRawParameterValue ("trigRate")->load();
 
                 // Calculate trigger frequency in Hz based on trigRate parameter
