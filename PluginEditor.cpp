@@ -60,7 +60,6 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
-    addAndMakeVisible (trigButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
@@ -135,41 +134,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
-    // Style TRIG button (E-Paper: same style as Randomize)
-    trigButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
-    trigButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
-    trigButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    trigButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
-    trigButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
-    trigButton.setLookAndFeel (ePaperLookAndFeel.get());
-
-    // TRIG button tap tempo functionality
-    trigButton.onClick = [this]
-    {
-        // Trigger event
-        processor.triggerReceived.store (true);
-        processor.baseTempoBlink.store (true);  // LED 1 blink
-
-        // Tap tempo detection
-        double currentTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-        double lastTap = processor.lastTapTime.load();
-
-        if (lastTap > 0.0)
-        {
-            double interval = currentTime - lastTap;
-            // Valid tap range: 30 BPM (2 sec) to 300 BPM (0.2 sec)
-            if (interval >= 0.2 && interval <= 2.0)
-            {
-                float detectedBPM = 60.0f / static_cast<float>(interval);
-                processor.detectedTapBPM.store (detectedBPM);
-                processor.tapTempoActive.store (true);
-            }
-        }
-
-        processor.lastTapTime.store (currentTime);
-    };
-
-    // Style tap BPM label (E-Paper: circular display like a knob)
+    // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     tapBpmLabel.setJustificationType (juce::Justification::centred);
@@ -507,13 +472,6 @@ void CloudLikeGranularEditor::timerCallback()
     {
         tapBpmLabel.setText (bpmText, juce::dontSendNotification);
     }
-
-    // Enable/disable TRIG button based on mode (Manual mode only)
-    bool isManualMode = !trigMode;
-    if (trigButton.isEnabled() != isManualMode)
-    {
-        trigButton.setEnabled (isManualMode);
-    }
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox)
@@ -676,11 +634,10 @@ void CloudLikeGranularEditor::resized()
     mixValueLabel.setBounds (mixKnobArea.withHeight (20).withY (mixKnobArea.getBottom() - 25));
     modeValueLabel.setBounds (modeKnobArea.withHeight (20).withY (modeKnobArea.getBottom() - 25));
 
-    // Row 3: TRIG Rate (left), BPM display (center), TRIG button (right)
+    // Row 3: TRIG Rate (left), BPM display (center, clickable)
     auto row3Content = row3.reduced (10, 0);
     auto trigRateArea = row3Content.removeFromLeft (colWidth);
-    auto tapBpmArea = row3Content.removeFromLeft (colWidth * 0.8f).withSizeKeepingCentre (colWidth * 0.6f, colWidth * 0.6f);
-    auto trigButtonArea = row3Content.withSizeKeepingCentre (colWidth * 0.8f, 40);
+    auto tapBpmArea = row3Content.withSizeKeepingCentre (colWidth * 0.6f, colWidth * 0.6f);
 
     placeKnob (trigRateKnob, trigRateArea);
 
@@ -688,11 +645,8 @@ void CloudLikeGranularEditor::resized()
     auto trigRateValueLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() - 25);
     trigRateValueLabel.setBounds (trigRateValueLabelArea);
 
-    // Tap BPM label (circular display like a knob)
+    // Tap BPM label (circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setBounds (tapBpmArea);
-
-    // TRIG button
-    trigButton.setBounds (trigButtonArea);
 
     // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
     // All buttons have equal size and spacing
@@ -707,4 +661,34 @@ void CloudLikeGranularEditor::resized()
     trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
+}
+
+void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
+{
+    // Check if BPM circle was clicked (only in Manual mode)
+    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    if (!trigMode && tapBpmLabel.getBounds().contains (event.getPosition()))
+    {
+        // Trigger event
+        processor.triggerReceived.store (true);
+        processor.baseTempoBlink.store (true);  // LED 1 blink
+
+        // Tap tempo detection
+        double currentTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+        double lastTap = processor.lastTapTime.load();
+
+        if (lastTap > 0.0)
+        {
+            double interval = currentTime - lastTap;
+            // Valid tap range: 30 BPM (2 sec) to 300 BPM (0.2 sec)
+            if (interval >= 0.2 && interval <= 2.0)
+            {
+                float detectedBPM = 60.0f / static_cast<float>(interval);
+                processor.detectedTapBPM.store (detectedBPM);
+                processor.tapTempoActive.store (true);
+            }
+        }
+
+        processor.lastTapTime.store (currentTime);
+    }
 }

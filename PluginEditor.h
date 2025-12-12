@@ -178,6 +178,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
+    void mouseDown (const juce::MouseEvent& event) override;
 
 private:
     CloudLikeGranularProcessor& processor;
@@ -210,10 +211,9 @@ private:
     juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
-    juce::TextButton trigButton { "TRIG" };  // Manual tap tempo trigger button
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
-    juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo
+    juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo (clickable for tap tempo)
 
     // Custom value labels for all knobs (displays meaningful text instead of raw numbers)
     juce::Label positionValueLabel;
