@@ -59,57 +59,23 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get());
     setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get());
     setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get());
-
-    // Custom text display for TRIG RATE: Show note values instead of numeric values
-    trigRateKnob.slider.textFromValueFunction = [](double value)
-    {
-        float trigRate = static_cast<float>(value);
-
-        if (trigRate < -3.4f)      return juce::String("1/16");
-        else if (trigRate < -2.8f) return juce::String("1/16T");
-        else if (trigRate < -2.2f) return juce::String("1/8");
-        else if (trigRate < -1.6f) return juce::String("1/8T");
-        else if (trigRate < -0.8f) return juce::String("1/4");
-        else if (trigRate < 0.0f)  return juce::String("1/4T");
-        else if (trigRate < 0.8f)  return juce::String("1/2");
-        else if (trigRate < 1.6f)  return juce::String("1/2T");
-        else if (trigRate < 2.4f)  return juce::String("1bar");
-        else if (trigRate < 3.2f)  return juce::String("1barT");
-        else                       return juce::String("2bars");
-    };
-
-    trigRateKnob.slider.valueFromTextFunction = [](const juce::String& text)
-    {
-        // Map text back to numeric value (center of each range)
-        if (text == "1/16")    return -3.6;
-        if (text == "1/16T")   return -3.0;
-        if (text == "1/8")     return -2.5;
-        if (text == "1/8T")    return -1.9;
-        if (text == "1/4")     return -1.2;
-        if (text == "1/4T")    return -0.4;
-        if (text == "1/2")     return 0.4;
-        if (text == "1/2T")    return 1.2;
-        if (text == "1bar")    return 2.0;
-        if (text == "1barT")   return 2.8;
-        if (text == "2bars")   return 3.6;
-        return 0.0;  // Default to 1/2 note
-    };
+    trigRateKnob.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);  // No text box - use custom label
 
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
-    addAndMakeVisible (trigRateLabel);
     addAndMakeVisible (modeValueLabel);
-
-    // Style TRIG RATE label (E-Paper: shows current division)
-    trigRateLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
-    trigRateLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
-    trigRateLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (trigRateValueLabel);
 
     // Style MODE value label (E-Paper: shows current mode name)
     modeValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
     modeValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     modeValueLabel.setJustificationType (juce::Justification::centred);
+
+    // Style TRIG RATE value label (E-Paper: shows current division)
+    trigRateValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+    trigRateValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    trigRateValueLabel.setJustificationType (juce::Justification::centred);
 
     // Style TRIG Mode toggle button (E-Paper: matte black text)
     trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
@@ -321,25 +287,25 @@ void CloudLikeGranularEditor::timerCallback()
     if (textureKnob.label.getText() != textureLabel)
         textureKnob.label.setText (textureLabel, juce::dontSendNotification);
 
-    // Update TRIG RATE label to show current division
+    // Update TRIG RATE value label to show current division
     float trigRate = processor.apvts.getRawParameterValue ("trigRate")->load();
-    juce::String trigRateText;
+    juce::String trigRateValueText;
 
-    if (trigRate < -3.4f)      trigRateText = "1/16";
-    else if (trigRate < -2.8f) trigRateText = "1/16T";
-    else if (trigRate < -2.2f) trigRateText = "1/8";
-    else if (trigRate < -1.6f) trigRateText = "1/8T";
-    else if (trigRate < -0.8f) trigRateText = "1/4";
-    else if (trigRate < 0.0f)  trigRateText = "1/4T";
-    else if (trigRate < 0.8f)  trigRateText = "1/2";
-    else if (trigRate < 1.6f)  trigRateText = "1/2T";
-    else if (trigRate < 2.4f)  trigRateText = "1 bar";
-    else if (trigRate < 3.2f)  trigRateText = "1 barT";
-    else                       trigRateText = "2 bars";
+    if (trigRate < -3.4f)      trigRateValueText = "1/16";
+    else if (trigRate < -2.8f) trigRateValueText = "1/16T";
+    else if (trigRate < -2.2f) trigRateValueText = "1/8";
+    else if (trigRate < -1.6f) trigRateValueText = "1/8T";
+    else if (trigRate < -0.8f) trigRateValueText = "1/4";
+    else if (trigRate < 0.0f)  trigRateValueText = "1/4T";
+    else if (trigRate < 0.8f)  trigRateValueText = "1/2";
+    else if (trigRate < 1.6f)  trigRateValueText = "1/2T";
+    else if (trigRate < 2.4f)  trigRateValueText = "1bar";
+    else if (trigRate < 3.2f)  trigRateValueText = "1barT";
+    else                       trigRateValueText = "2bars";
 
-    if (trigRateLabel.getText() != trigRateText)
+    if (trigRateValueLabel.getText() != trigRateValueText)
     {
-        trigRateLabel.setText (trigRateText, juce::dontSendNotification);
+        trigRateValueLabel.setText (trigRateValueText, juce::dontSendNotification);
     }
 
     // Update LED indicators for tempo visualization
@@ -508,9 +474,9 @@ void CloudLikeGranularEditor::resized()
     auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
     placeKnob (trigRateKnob, trigRateArea);
 
-    // TRIG RATE label (shows current division: 1/16, 1/8T, etc.)
-    auto trigRateLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() + 35);
-    trigRateLabel.setBounds (trigRateLabelArea);
+    // TRIG RATE value label (shows current division below the knob: 1/16, 1/8T, etc.)
+    auto trigRateValueLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() - 25);
+    trigRateValueLabel.setBounds (trigRateValueLabelArea);
 
     // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
     // All buttons have equal size and spacing
