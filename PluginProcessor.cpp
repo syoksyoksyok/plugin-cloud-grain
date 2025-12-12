@@ -1224,10 +1224,13 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             forwardFFT.performRealOnlyInverseTransform(spectralShiftedR.data());
 
             // Overlap-Add: accumulate to output buffer with Hann window (OPTIMIZED: LUT)
-            float normGain = 2.0f / fftSize;
+            // Gain compensation for 75% overlap (hopSize = fftSize/4)
+            // Increased gain to compensate for window attenuation and overlap
+            float normGain = 4.0f / fftSize;  // Increased from 2.0f
             for (int n = 0; n < fftSize; ++n)
             {
                 float window = hannWindow(n, fftSize);
+                // Apply window and accumulate (Overlap-Add synthesis)
                 spectralOutputL[n] += spectralShiftedL[n] * normGain * window;
                 spectralOutputR[n] += spectralShiftedR[n] * normGain * window;
             }
@@ -1235,22 +1238,38 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             spectralOutputPos = 0;
         }
 
-        // Output and consume from spectral buffer
+        // Output from spectral buffer with proper overlap-add handling
         if (spectralOutputPos < fftSize)
         {
-            wetL[i] = spectralOutputL[spectralOutputPos];
-            wetR[i] = spectralOutputR[spectralOutputPos];
-
-            spectralOutputL[spectralOutputPos] = 0.0f;
-            spectralOutputR[spectralOutputPos] = 0.0f;
+            // Output with additional gain boost for audible results
+            wetL[i] = spectralOutputL[spectralOutputPos] * 2.5f;
+            wetR[i] = spectralOutputR[spectralOutputPos] * 2.5f;
 
             spectralOutputPos++;
+
+            // Shift output buffer when we've consumed one hop worth of samples
+            if (spectralOutputPos == hopSize)
+            {
+                // Shift buffer left by hopSize for next overlap-add frame
+                for (int n = 0; n < fftSize - hopSize; ++n)
+                {
+                    spectralOutputL[n] = spectralOutputL[n + hopSize];
+                    spectralOutputR[n] = spectralOutputR[n + hopSize];
+                }
+                // Clear the newly exposed section
+                for (int n = fftSize - hopSize; n < fftSize; ++n)
+                {
+                    spectralOutputL[n] = 0.0f;
+                    spectralOutputR[n] = 0.0f;
+                }
+                spectralOutputPos = 0;
+            }
         }
         else
         {
-            // Pass through input until FFT processing catches up (fixes initial silence)
-            wetL[i] = inSampleL;
-            wetR[i] = inSampleR;
+            // Fallback: pass through input with slight attenuation
+            wetL[i] = inSampleL * 0.3f;
+            wetR[i] = inSampleR * 0.3f;
         }
     }
 }
