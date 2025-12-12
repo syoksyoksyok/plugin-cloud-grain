@@ -380,7 +380,7 @@ private:
     alignas(32) std::array<float, fftSize> spectralPhaseAccumL;  // Accumulated phase
     alignas(32) std::array<float, fftSize> spectralPhaseAccumR;
 
-    // Oliverb mode state (Multi-tap reverb with modulation)
+    // Oliverb mode state (Multi-tap reverb with modulation - Clouds/SuperParasites-style)
     struct OliverbTap
     {
         std::vector<float> buffer;
@@ -388,8 +388,24 @@ private:
         int bufferSizeMask = 0;  // OPTIMIZATION: Bit mask for power-of-2 buffer
         float modPhase = 0.0f;
         float modDepth = 0.0f;
+
+        // Option 2: Tone filtering state
+        float prevSampleL = 0.0f;
+        float prevSampleR = 0.0f;
+
+        // Option 5: Original tap time for room size scaling
+        float originalTapTime = 0.0f;
     };
-    std::array<OliverbTap, 8> oliverbTaps;
+    static constexpr int maxOliverbTaps = 16;  // Extended from 8 to 16 for density control
+    std::array<OliverbTap, maxOliverbTaps> oliverbTaps;
+
+    // Option 4: TRIG reverb freeze
+    bool oliverbFrozen = false;
+    float oliverbFreezeEnvelope = 1.0f;
+
+    // Option 1: Allpass diffusers (Clouds-style, 4 stages per channel)
+    SimpleAllpass oliverbDiffuserL1, oliverbDiffuserL2, oliverbDiffuserL3, oliverbDiffuserL4;
+    SimpleAllpass oliverbDiffuserR1, oliverbDiffuserR2, oliverbDiffuserR3, oliverbDiffuserR4;
 
     // Resonestor mode state (Karplus-Strong resonators)
     static constexpr int maxResonators = 12;

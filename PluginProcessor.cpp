@@ -227,9 +227,14 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
         loopTaps[t].panR = std::sin(angle);
     }
 
-    // Initialize Oliverb taps (multi-tap delay with modulation)
-    const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
-    for (size_t i = 0; i < oliverbTaps.size(); ++i)
+    // Initialize Oliverb taps (multi-tap delay with modulation - Clouds/SuperParasites-style)
+    // Extended to 16 taps for DENSITY control
+    const std::array<float, 16> tapTimes = {
+        0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f,  // Original 8 taps
+        0.067f, 0.113f, 0.157f, 0.227f, 0.311f, 0.397f, 0.509f, 0.677f   // Additional 8 taps
+    };
+
+    for (size_t i = 0; i < maxOliverbTaps; ++i)
     {
         // OPTIMIZATION: Round to power of 2 for bit masking
         int requestedSize = static_cast<int>(sampleRate * tapTimes[i]);
@@ -240,9 +245,31 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
         oliverbTaps[i].buffer.resize(tapSize, 0.0f);
         oliverbTaps[i].bufferSizeMask = tapSize - 1;  // OPTIMIZED: Bit mask
         oliverbTaps[i].writePos = 0;
-        oliverbTaps[i].modPhase = static_cast<float>(i) * 0.125f * juce::MathConstants<float>::twoPi;  // OPTIMIZED: Multiply instead of divide
+        oliverbTaps[i].modPhase = static_cast<float>(i) * 0.125f * juce::MathConstants<float>::twoPi;
         oliverbTaps[i].modDepth = 0.002f * sampleRate;  // 2ms modulation depth
+
+        // Option 2: Initialize tone filter state
+        oliverbTaps[i].prevSampleL = 0.0f;
+        oliverbTaps[i].prevSampleR = 0.0f;
+
+        // Option 5: Store original tap time for room size scaling
+        oliverbTaps[i].originalTapTime = tapTimes[i];
     }
+
+    // Option 4: Initialize reverb freeze state
+    oliverbFrozen = false;
+    oliverbFreezeEnvelope = 1.0f;
+
+    // Option 1: Initialize allpass diffusers (Clouds-style prime number delays)
+    oliverbDiffuserL1.setDelay(142);   // Prime delays for dense diffusion
+    oliverbDiffuserL2.setDelay(107);
+    oliverbDiffuserL3.setDelay(379);
+    oliverbDiffuserL4.setDelay(277);
+
+    oliverbDiffuserR1.setDelay(149);   // Different for stereo width
+    oliverbDiffuserR2.setDelay(113);
+    oliverbDiffuserR3.setDelay(397);
+    oliverbDiffuserR4.setDelay(281);
 
     // Initialize Resonestor resonators (Karplus-Strong)
     const std::array<float, maxResonators> resonatorFreqs = {
@@ -1785,40 +1812,87 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== OLIVERB MODE (Block Processing) ==========
-    // OPTIMIZATION: Calculate parameters once per block
+    // ========== OLIVERB MODE (Clouds/SuperParasites-style improvements) ==========
+    // Improvements:
+    // 1. Allpass diffuser chains for dense reverb
+    // 2. TEXTURE tone filtering (dark/bright reverb)
+    // 3. DENSITY tap count control (2-16 taps)
+    // 4. TRIG reverb freeze
+    // 5. SIZE room size scaling (early/late reflections)
+    //
+    // POSITION: Modulation rate
+    // SIZE: Room size / decay time
+    // PITCH: Pitch shift (reserved for future)
+    // DENSITY: Number of taps (2-16)
+    // TEXTURE: Tone filter (dark/bright)
+    // TRIG: Reverb freeze toggle
+    // FREEZE: Hold reverb tail
+
+    // Calculate parameters once per block
     float modRate = 0.1f + position * 4.9f;
-    float decayTime = 0.2f + size * 4.8f;
     float pitchRatio = pitchToRatio(pitch);
-    float modDepth = density * 0.01f * currentSampleRate;
-    float diffusion = texture;
+
+    // Option 5: SIZE controls room size scaling
+    float roomSize = 0.5f + size * 1.5f;  // 0.5x to 2.0x room size
+    float decayTime = 0.2f + size * 4.8f;
+
+    // Option 3: DENSITY controls number of active taps
+    int numActiveTaps = 2 + static_cast<int>(density * 14.0f);  // 2 to 16 taps
+    numActiveTaps = juce::jlimit(2, maxOliverbTaps, numActiveTaps);
+
+    float modDepth = 0.002f * currentSampleRate;  // Fixed modulation depth
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Trigger reverb reflection/echo event (Clouds TRIG behavior)
-        // Inject impulse into reverb taps to create echo burst
-        bool triggerImpulse = false;
+        // === Option 4: TRIG reverb freeze (Clouds-style) ===
         if (i == 0 && triggerReceived.load())
         {
-            triggerImpulse = true;
             triggerReceived.store(false);
+
+            // Toggle freeze mode
+            oliverbFrozen = !oliverbFrozen;
+
+            if (oliverbFrozen)
+            {
+                // Inject strong impulse into all taps when freezing
+                for (int t = 0; t < numActiveTaps; ++t)
+                {
+                    auto& tap = oliverbTaps[t];
+                    float inputMix = (t & 1) ? (inR ? inR[i] : inL[i]) : inL[i];
+                    tap.buffer[tap.writePos] += inputMix * 5.0f;  // Strong impulse
+                }
+            }
+        }
+
+        // Update freeze envelope
+        if (oliverbFrozen)
+        {
+            oliverbFreezeEnvelope *= 0.9999f;  // Slow decay during freeze
+        }
+        else
+        {
+            oliverbFreezeEnvelope = 1.0f;
         }
 
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
+        // Write to ring buffer with feedback
         if (!freeze && bufferSize > 0)
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            writeHead = (writeHead + 1) & bufferSizeMask;
         }
 
         float outputL = 0.0f;
         float outputR = 0.0f;
 
-        // Process each tap
-        for (size_t t = 0; t < oliverbTaps.size(); ++t)
+        // Input gain control for freeze mode
+        float inputGain = (freeze || oliverbFrozen) ? 0.0f : 1.0f;
+
+        // Process active taps
+        for (int t = 0; t < numActiveTaps; ++t)
         {
             auto& tap = oliverbTaps[t];
 
@@ -1827,39 +1901,75 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
             if (tap.modPhase > juce::MathConstants<float>::twoPi)
                 tap.modPhase -= juce::MathConstants<float>::twoPi;
 
-            // Modulated read position (OPTIMIZED: LUT + Bit mask)
+            // Modulated read position
             float mod = fastSin(tap.modPhase) * modDepth;
-            int readPos = tap.writePos - static_cast<int>((tap.buffer.size() >> 1) + mod);  // OPTIMIZED: Bit shift
+            int readPos = tap.writePos - static_cast<int>((tap.buffer.size() >> 1) + mod);
             if (readPos < 0) readPos += tap.buffer.size();
-            readPos = readPos & tap.bufferSizeMask;  // OPTIMIZED: Bit mask instead of modulo
+            readPos = readPos & tap.bufferSizeMask;
 
             float delayed = tap.buffer[readPos];
+
+            // === Option 2: TEXTURE tone filtering (Clouds-style) ===
+            if (texture < 0.5f)
+            {
+                // Low-pass filter (dark reverb)
+                float lpAmount = (0.5f - texture) * 2.0f;  // 0.0 to 1.0
+                float filtered = delayed * (1.0f - lpAmount * 0.7f) +
+                                ((t & 1) ? tap.prevSampleR : tap.prevSampleL) * lpAmount * 0.7f;
+                delayed = filtered;
+            }
+            else if (texture > 0.5f)
+            {
+                // High-pass filter (bright reverb)
+                float hpAmount = (texture - 0.5f) * 2.0f;  // 0.0 to 1.0
+                float filtered = delayed - ((t & 1) ? tap.prevSampleR : tap.prevSampleL) * hpAmount * 0.5f;
+                delayed = filtered;
+            }
+
+            // Store for next sample
+            if (t & 1)
+                tap.prevSampleR = delayed;
+            else
+                tap.prevSampleL = delayed;
 
             // Calculate feedback with decay
             float tapFeedback = std::pow(0.001f, 1.0f / (decayTime * currentSampleRate / tap.buffer.size()));
 
-            // Write input + feedback (OPTIMIZED: Bit shift for division by 8)
-            float inputMix = (t & 1) ? inSampleR : inSampleL;  // OPTIMIZED: Bit mask instead of modulo
+            // Input selection (alternate L/R)
+            float inputMix = (t & 1) ? inSampleR : inSampleL;
 
-            // TRIG: Inject impulse into tap to create reflection/echo event
-            float impulse = triggerImpulse ? ((t & 1) ? inSampleR : inSampleL) * 2.0f : 0.0f;
-
-            tap.buffer[tap.writePos] = inputMix * 0.125f + delayed * tapFeedback + impulse;
-            tap.writePos = (tap.writePos + 1) & tap.bufferSizeMask;  // OPTIMIZED: Bit mask
+            // Write to tap buffer with freeze control
+            tap.buffer[tap.writePos] = inputMix * inputGain * 0.125f +
+                                      delayed * tapFeedback * oliverbFreezeEnvelope;
+            tap.writePos = (tap.writePos + 1) & tap.bufferSizeMask;
 
             // Accumulate to output (alternate L/R)
-            if (!(t & 1))  // OPTIMIZED: Bit mask instead of modulo
-                outputL += delayed * (1.0f - diffusion * 0.5f);
+            if (!(t & 1))
+                outputL += delayed;
             else
-                outputR += delayed * (1.0f - diffusion * 0.5f);
+                outputR += delayed;
         }
 
-        // Apply diffusion (cross-mix)
-        float diffusedL = outputL * (1.0f - diffusion) + outputR * diffusion;
-        float diffusedR = outputR * (1.0f - diffusion) + outputL * diffusion;
+        // Normalize by number of taps
+        float tapNormalization = 1.0f / std::sqrt(static_cast<float>(numActiveTaps));
+        outputL *= tapNormalization;
+        outputR *= tapNormalization;
 
-        // Mix with direct input for immediate sound (Parasites-style)
-        // Reverb output + dry signal attenuated
+        // === Option 1: Allpass diffuser chains (Clouds-style) ===
+        // Process through 4-stage allpass diffuser for each channel
+        float diffusedL = outputL;
+        diffusedL = oliverbDiffuserL1.process(diffusedL);
+        diffusedL = oliverbDiffuserL2.process(diffusedL);
+        diffusedL = oliverbDiffuserL3.process(diffusedL);
+        diffusedL = oliverbDiffuserL4.process(diffusedL);
+
+        float diffusedR = outputR;
+        diffusedR = oliverbDiffuserR1.process(diffusedR);
+        diffusedR = oliverbDiffuserR2.process(diffusedR);
+        diffusedR = oliverbDiffuserR3.process(diffusedR);
+        diffusedR = oliverbDiffuserR4.process(diffusedR);
+
+        // Mix diffused output with direct input (Parasites-style)
         wetL[i] = diffusedL * 0.8f + inSampleL * 0.3f;
         wetR[i] = diffusedR * 0.8f + inSampleR * 0.3f;
     }
