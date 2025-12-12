@@ -308,12 +308,40 @@ private:
     int pitchShifterWindowSize = 2048;
     int pitchShifterSearchWindow = 512;
 
-    // Looping mode state
+    // Looping mode state (Clouds-style with improvements)
     double loopReadPos = 0.0;
     int loopStartPos = 0;
     int loopEndPos = 0;
     int loopLength = 0;
     int previousLoopLength = 0;  // Track changes to prevent clicks
+
+    // Option 1: Loop boundary crossfade
+    static constexpr int loopCrossfadeLength = 128;  // Samples for crossfade
+    bool loopCrossfadeActive = false;
+
+    // Option 2: TRIG loop capture with envelope (Clouds-style)
+    std::vector<float> loopCaptureBufferL;
+    std::vector<float> loopCaptureBufferR;
+    int loopCaptureLength = 0;
+    bool loopUseCaptured = false;  // Use captured loop or live buffer
+    float loopEnvPhase = 1.0f;     // Envelope phase (0.0 = start, 1.0 = fully open)
+    float loopEnvIncrement = 0.0f; // Envelope increment per sample
+
+    // Option 3: TEXTURE feedback filtering (Clouds-style)
+    struct LoopFilter {
+        float previousL = 0.0f;
+        float previousR = 0.0f;
+    };
+    LoopFilter loopFeedbackFilter;
+
+    // Option 4: DENSITY multi-tap delay (SuperParasites-style)
+    struct LoopTap {
+        double readPos = 0.0;
+        float panL = 0.0f;
+        float panR = 0.0f;
+    };
+    static constexpr int maxLoopTaps = 4;
+    std::array<LoopTap, maxLoopTaps> loopTaps;
 
     // Spectral mode state (FFT-based using juce::dsp)
     static constexpr int fftOrder = 11;
@@ -422,6 +450,7 @@ private:
     void processLoopingBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                               float* wetL, float* wetR,
                               float position, float size, float pitch,
+                              float density, float texture,
                               float feedback, bool freeze);
 
     void processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,
