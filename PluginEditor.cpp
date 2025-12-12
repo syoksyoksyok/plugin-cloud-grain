@@ -498,8 +498,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     }
     g.fillEllipse (bpmBounds);
 
-    // Border: thicker in Manual mode
-    g.setColour (uiColors.buttonText);
+    // Border: thicker in Manual mode, color matches MIX knob outline
+    g.setColour (uiColors.mix.outline);
     float borderThickness = isManualMode ? 2.5f : 1.5f;
     g.drawEllipse (bpmBounds, borderThickness);
 
