@@ -2568,6 +2568,7 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
     for (int ch = 0; ch < 2; ++ch)
     {
         float* output = (ch == 0) ? wetL : wetR;
+        auto* fftBuffer = (ch == 0) ? &fftDataL : &fftDataR;
         auto* frozenMagnitude = (ch == 0) ? &spectralClouds.frozenMagnitudeL : &spectralClouds.frozenMagnitudeR;
         auto* phaseArray = (ch == 0) ? &spectralClouds.phaseL : &spectralClouds.phaseR;
 
@@ -2591,22 +2592,22 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
                 {
                     // Apply Hann window
                     float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (fftSize - 1)));
-                    fftData[i] = buffer.getSample(ch, sampleIdx) * window;
+                    (*fftBuffer)[i] = buffer.getSample(ch, sampleIdx) * window;
                 }
                 else
                 {
-                    fftData[i] = 0.0f;
+                    (*fftBuffer)[i] = 0.0f;
                 }
             }
 
             // Perform forward FFT
-            fft->performRealOnlyForwardTransform(fftData.data());
+            fft->performRealOnlyForwardTransform(fftBuffer->data());
 
             // Process frequency bins (only up to Nyquist)
             for (int bin = 0; bin < fftSize / 2; ++bin)
             {
-                float real = fftData[bin * 2];
-                float imag = fftData[bin * 2 + 1];
+                float real = (*fftBuffer)[bin * 2];
+                float imag = (*fftBuffer)[bin * 2 + 1];
 
                 // Convert to polar coordinates
                 float magnitude = std::sqrt(real * real + imag * imag);
@@ -2659,26 +2660,26 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
                 }
 
                 // Convert back to rectangular coordinates
-                fftData[bin * 2] = magnitude * std::cos(phase);
-                fftData[bin * 2 + 1] = magnitude * std::sin(phase);
+                (*fftBuffer)[bin * 2] = magnitude * std::cos(phase);
+                (*fftBuffer)[bin * 2 + 1] = magnitude * std::sin(phase);
             }
 
             // Mirror the spectrum for IFFT (conjugate symmetry)
             for (int bin = fftSize / 2; bin < fftSize; ++bin)
             {
                 int mirrorBin = fftSize - bin;
-                fftData[bin * 2] = fftData[mirrorBin * 2];
-                fftData[bin * 2 + 1] = -fftData[mirrorBin * 2 + 1];  // Conjugate
+                (*fftBuffer)[bin * 2] = (*fftBuffer)[mirrorBin * 2];
+                (*fftBuffer)[bin * 2 + 1] = -(*fftBuffer)[mirrorBin * 2 + 1];  // Conjugate
             }
 
             // Perform inverse FFT
-            fft->performRealOnlyInverseTransform(fftData.data());
+            fft->performRealOnlyInverseTransform(fftBuffer->data());
 
             // Overlap-add to output buffer with Hann window
             for (int i = 0; i < fftSize && (frameStart + i) < numSamples; ++i)
             {
                 float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (fftSize - 1)));
-                output[frameStart + i] += fftData[i] * window * 0.5f;  // 0.5f: normalize for overlap
+                output[frameStart + i] += (*fftBuffer)[i] * window * 0.5f;  // 0.5f: normalize for overlap
             }
         }
     }
