@@ -403,6 +403,18 @@ void CloudLikeGranularEditor::timerCallback()
             textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
             break;
 
+        case 7: // Spectral Clouds
+            // Filter: position 0-1 -> 0-100% (threshold)
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            // Bands: size 0-1 -> 4-64 bands
+            sizeValueText = juce::String (4 + static_cast<int>(size * 60.0f));
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            // Smooth: density 0-1 -> 0-100%
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            // Phase: texture 0-1 -> 0-100%
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
         default:
             posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
             sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
@@ -604,8 +616,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     // LED labels (below each LED)
     g.setColour (uiColors.knobLabel);
     g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
-    g.drawText ("×1", ledX1 - 5, ledY + ledSize + 2, ledSize + 10, 12, juce::Justification::centred);
-    g.drawText ("TRIG", ledX2 - 8, ledY + ledSize + 2, ledSize + 16, 12, juce::Justification::centred);
+    g.drawText ("×1", static_cast<int>(ledX1 - 5), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 10), 12, juce::Justification::centred);
+    g.drawText ("TRIG", static_cast<int>(ledX2 - 8), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 16), 12, juce::Justification::centred);
 }
 
 void CloudLikeGranularEditor::resized()
@@ -672,7 +684,7 @@ void CloudLikeGranularEditor::resized()
     // Row 3: TRIG Rate (left), BPM display (center, clickable)
     auto row3Content = row3.reduced (10, 0);
     auto trigRateArea = row3Content.removeFromLeft (colWidth);
-    auto tapBpmArea = row3Content.withSizeKeepingCentre (colWidth * 0.6f, colWidth * 0.6f);
+    auto tapBpmArea = row3Content.withSizeKeepingCentre (static_cast<int>(colWidth * 0.6f), static_cast<int>(colWidth * 0.6f));
 
     placeKnob (trigRateKnob, trigRateArea);
 
