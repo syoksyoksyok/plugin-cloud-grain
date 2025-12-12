@@ -60,6 +60,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
+    addAndMakeVisible (killDryButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
@@ -134,6 +135,26 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
+    // Style Kill Dry button (E-Paper: momentary button that forces MIX to 100% while pressed)
+    killDryButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    killDryButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
+    killDryButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    killDryButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
+    killDryButton.setLookAndFeel (ePaperLookAndFeel.get());
+
+    // Kill Dry: Momentary button - sets killDry parameter while pressed
+    killDryButton.onStateChange = [this]
+    {
+        if (auto* param = processor.apvts.getParameter ("killDry"))
+        {
+            bool isDown = killDryButton.isDown();
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
+
     // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
@@ -178,6 +199,7 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     trigModeButton.setLookAndFeel (nullptr);
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
+    killDryButton.setLookAndFeel (nullptr);
 
     // unique_ptr will automatically clean up ePaperLookAndFeel
 }
@@ -606,19 +628,21 @@ void CloudLikeGranularEditor::resized()
     // Tap BPM label (circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setBounds (tapBpmArea);
 
-    // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
+    // E-Paper UI: Buttons at bottom (4 buttons: TrigMode, Freeze, Randomize, Kill Dry)
     // All buttons have equal size and spacing
     auto buttonArea = buttonRow.reduced (5);
-    auto buttonWidth = buttonArea.getWidth() / 3;
+    auto buttonWidth = buttonArea.getWidth() / 4;
     auto buttonPadding = 3;
 
     auto trigModeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto freezeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto randomArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
+    auto killDryArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
 
     trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
+    killDryButton.setBounds (killDryArea);
 }
 
 void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)

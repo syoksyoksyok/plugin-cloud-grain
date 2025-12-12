@@ -222,6 +222,7 @@ private:
     juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
+    juce::TextButton killDryButton { "Kill Dry" };  // Momentary: forces MIX to 100% while pressed
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
     juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo (clickable for tap tempo)
