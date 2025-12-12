@@ -604,8 +604,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     // LED labels (below each LED)
     g.setColour (uiColors.knobLabel);
     g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
-    g.drawText ("×1", ledX1 - 5, ledY + ledSize + 2, ledSize + 10, 12, juce::Justification::centred);
-    g.drawText ("TRIG", ledX2 - 8, ledY + ledSize + 2, ledSize + 16, 12, juce::Justification::centred);
+    g.drawText ("×1", static_cast<int>(ledX1 - 5), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 10), 12, juce::Justification::centred);
+    g.drawText ("TRIG", static_cast<int>(ledX2 - 8), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 16), 12, juce::Justification::centred);
 }
 
 void CloudLikeGranularEditor::resized()
@@ -672,7 +672,7 @@ void CloudLikeGranularEditor::resized()
     // Row 3: TRIG Rate (left), BPM display (center, clickable)
     auto row3Content = row3.reduced (10, 0);
     auto trigRateArea = row3Content.removeFromLeft (colWidth);
-    auto tapBpmArea = row3Content.withSizeKeepingCentre (colWidth * 0.6f, colWidth * 0.6f);
+    auto tapBpmArea = row3Content.withSizeKeepingCentre (static_cast<int>(colWidth * 0.6f), static_cast<int>(colWidth * 0.6f));
 
     placeKnob (trigRateKnob, trigRateArea);
 
