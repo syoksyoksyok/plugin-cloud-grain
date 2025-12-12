@@ -59,6 +59,7 @@ class EPaperLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     UIColors::KnobColors* knobColors = nullptr;  // Pointer to current knob's colors
+    bool forceMaxPosition = false;  // When true, indicator shows 100% position (for Kill Dry)
 
     EPaperLookAndFeel()
     {
@@ -71,6 +72,8 @@ public:
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider& slider) override
     {
+        // Override slider position if forceMaxPosition is set (Kill Dry active)
+        float effectiveSliderPos = forceMaxPosition ? 1.0f : sliderPos;
         auto radius = juce::jmin (width / 2, height / 2) - 4.0f;
         auto centreX = x + width * 0.5f;
         auto centreY = y + height * 0.5f;
@@ -78,7 +81,7 @@ public:
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
         // Standard angle calculation with Y-axis negated in rendering
-        auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+        auto angle = rotaryStartAngle + effectiveSliderPos * (rotaryEndAngle - rotaryStartAngle);
 
         // Get colors for this knob (use default if not set)
         juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);

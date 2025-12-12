@@ -220,6 +220,14 @@ void CloudLikeGranularEditor::timerCallback()
     float feedback = processor.apvts.getRawParameterValue("feedback")->load();
     float reverb = processor.apvts.getRawParameterValue("reverb")->load();
     float mix = processor.apvts.getRawParameterValue("mix")->load();
+    bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
+
+    // Update MIX knob indicator position when Kill Dry is active
+    if (mixLookAndFeel->forceMaxPosition != killDry)
+    {
+        mixLookAndFeel->forceMaxPosition = killDry;
+        mixKnob.slider.repaint();
+    }
 
     // Update UI components using helper functions
     updateButtonStates(trigMode);
