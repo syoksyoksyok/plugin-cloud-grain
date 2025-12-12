@@ -403,6 +403,18 @@ void CloudLikeGranularEditor::timerCallback()
             textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
             break;
 
+        case 7: // Spectral Clouds
+            // Filter: position 0-1 -> 0-100% (threshold)
+            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
+            // Bands: size 0-1 -> 4-64 bands
+            sizeValueText = juce::String (4 + static_cast<int>(size * 60.0f));
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
+            // Smooth: density 0-1 -> 0-100%
+            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
+            // Phase: texture 0-1 -> 0-100%
+            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            break;
+
         default:
             posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
             sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
