@@ -237,9 +237,9 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     for (size_t i = 0; i < maxOliverbTaps; ++i)
     {
         // OPTIMIZATION: Round to power of 2 for bit masking
-        int requestedSize = static_cast<int>(sampleRate * tapTimes[i]);
+        int tapRequestedSize = static_cast<int>(sampleRate * tapTimes[i]);
         int tapSize = 1;
-        while (tapSize < requestedSize)
+        while (tapSize < tapRequestedSize)
             tapSize <<= 1;  // Find next power of 2
 
         oliverbTaps[i].buffer.resize(tapSize, 0.0f);
@@ -755,9 +755,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 res.writePos = 0;
                 res.active = false;
             }
-            // Reset Parasites-style burst and voice state
-            resonestorVoice = 0;
-            resonestorBurstTime = 0.0f;
+            // Reset Resonestor state
             resonestorPreviousTrigger = false;
         }
 
