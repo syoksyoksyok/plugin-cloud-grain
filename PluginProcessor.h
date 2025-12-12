@@ -518,6 +518,18 @@ private:
         std::vector<float> crossfadeBufferR;
         bool hasPreviousCapture = false;
 
+        // === Stutter/capture state ===
+        float stutterPhase = 0.0f;
+        bool isCapturing = false;
+
+        // === Slice order for pattern playback ===
+        std::array<int, 16> sliceOrder = {};
+
+        // === Trigger mode and hold state ===
+        int triggerMode = 0;       // 0: Repeat, 1: Gate, etc.
+        bool triggerHeld = false;
+        float triggerHoldTime = 0.0f;
+
         // === Alternating direction (bidirectional loop) ===
         bool alternatingEnabled = false;
         bool playingForward = true;
