@@ -343,25 +343,35 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     int beatRepeatSize = static_cast<int>(sampleRate * 2.0);
     beatRepeat.captureBufferL.resize(beatRepeatSize, 0.0f);
     beatRepeat.captureBufferR.resize(beatRepeatSize, 0.0f);
-    beatRepeat.captureLength = beatRepeatSize >> 2;  // OPTIMIZED: Bit shift for division by 4
+    beatRepeat.captureLength = 0;
     beatRepeat.repeatPos = 0.0f;
-    beatRepeat.stutterPhase = 0.0f;
-    beatRepeat.isCapturing = false;
+    beatRepeat.isPlaying = false;
 
-    // Initialize Clouds/SuperParasites-style improvements
+    // Initialize Kammerl-style state
+    beatRepeat.numSamplesSinceTrigger = 0;
+    beatRepeat.sliceSizeSamples = 0;
+    beatRepeat.numRemainingSamplesInSlice = 0;
+    beatRepeat.synchronized = false;
+    beatRepeat.clockDividerIndex = 0;
+    beatRepeat.pitchMode = BeatRepeatState::PITCH_FIXED;
+    beatRepeat.basePitchSpeed = 1.0f;
+    beatRepeat.loopBeginPercent = 0.0f;
+    beatRepeat.loopEndPercent = 1.0f;
+    beatRepeat.loopBeginSamples = 0;
+    beatRepeat.loopEndSamples = 0;
+    beatRepeat.sizeModulationEnabled = false;
+    beatRepeat.sizeModulationAmount = 0.0f;
+    beatRepeat.slicePattern = BeatRepeatState::SLICE_SEQUENTIAL;
     beatRepeat.numSlices = 1;
     beatRepeat.currentSlice = 0;
-    for (int i = 0; i < 16; ++i)
-        beatRepeat.sliceOrder[i] = i;  // Sequential order by default
-
-    beatRepeat.triggerMode = 0;  // Mode 0: Repeat (default)
-    beatRepeat.triggerHeld = false;
-    beatRepeat.triggerHoldTime = 0.0f;
-
+    beatRepeat.sliceDirection = 1;
+    beatRepeat.triggerProbability = 1.0f;
     beatRepeat.envelopePhase = 0.0f;
     beatRepeat.crossfadeBufferL.resize(beatRepeatSize, 0.0f);
     beatRepeat.crossfadeBufferR.resize(beatRepeatSize, 0.0f);
     beatRepeat.hasPreviousCapture = false;
+    beatRepeat.alternatingEnabled = false;
+    beatRepeat.playingForward = true;
 
     // Initialize Spectral Clouds state (SuperParasites-style)
     spectralClouds.currentGain.fill(1.0f);  // Start with all bands at full gain
