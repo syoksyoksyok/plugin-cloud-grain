@@ -60,8 +60,10 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
+    addAndMakeVisible (trigButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
+    addAndMakeVisible (tapBpmLabel);
     addAndMakeVisible (positionValueLabel);
     addAndMakeVisible (sizeValueLabel);
     addAndMakeVisible (pitchValueLabel);
@@ -132,6 +134,46 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->setValueNotifyingHost (0.0f);
         }
     };
+
+    // Style TRIG button (E-Paper: same style as Randomize)
+    trigButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    trigButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
+    trigButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    trigButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    trigButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
+    trigButton.setLookAndFeel (ePaperLookAndFeel.get());
+
+    // TRIG button tap tempo functionality
+    trigButton.onClick = [this]
+    {
+        // Trigger event
+        processor.triggerReceived.store (true);
+        processor.baseTempoBlink.store (true);  // LED 1 blink
+
+        // Tap tempo detection
+        double currentTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+        double lastTap = processor.lastTapTime.load();
+
+        if (lastTap > 0.0)
+        {
+            double interval = currentTime - lastTap;
+            // Valid tap range: 30 BPM (2 sec) to 300 BPM (0.2 sec)
+            if (interval >= 0.2 && interval <= 2.0)
+            {
+                float detectedBPM = 60.0f / static_cast<float>(interval);
+                processor.detectedTapBPM.store (detectedBPM);
+                processor.tapTempoActive.store (true);
+            }
+        }
+
+        processor.lastTapTime.store (currentTime);
+    };
+
+    // Style tap BPM label (E-Paper: circular display like a knob)
+    tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
+    tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    tapBpmLabel.setJustificationType (juce::Justification::centred);
+    tapBpmLabel.setText ("---", juce::dontSendNotification);
 
     auto& apvts = processor.apvts;
 
@@ -457,6 +499,21 @@ void CloudLikeGranularEditor::timerCallback()
             repaint();
         }
     }
+
+    // Update tap tempo BPM display
+    float detectedBPM = processor.detectedTapBPM.load();
+    juce::String bpmText = detectedBPM > 0.0f ? juce::String(static_cast<int>(detectedBPM)) : "---";
+    if (tapBpmLabel.getText() != bpmText)
+    {
+        tapBpmLabel.setText (bpmText, juce::dontSendNotification);
+    }
+
+    // Enable/disable TRIG button based on mode (Manual mode only)
+    bool isManualMode = !trigMode;
+    if (trigButton.isEnabled() != isManualMode)
+    {
+        trigButton.setEnabled (isManualMode);
+    }
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox)
@@ -544,6 +601,18 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
     g.drawText ("×1", ledX1 - 5, ledY + ledSize + 2, ledSize + 10, 12, juce::Justification::centred);
     g.drawText ("TRIG", ledX2 - 8, ledY + ledSize + 2, ledSize + 16, 12, juce::Justification::centred);
+
+    // Draw circular background for tap BPM label (knob-style display)
+    auto bpmBounds = tapBpmLabel.getBounds().toFloat();
+    g.setColour (juce::Colour::fromRGB (240, 240, 240));  // Light gray background
+    g.fillEllipse (bpmBounds);
+    g.setColour (uiColors.buttonText);
+    g.drawEllipse (bpmBounds, 2.0f);  // Border
+
+    // Draw "BPM" text below the circle
+    auto bpmLabelArea = bpmBounds.withY (bpmBounds.getBottom() + 2).withHeight (15);
+    g.setFont (juce::Font ("Courier New", 10.0f, juce::Font::plain));
+    g.drawText ("BPM", bpmLabelArea, juce::Justification::centred);
 }
 
 void CloudLikeGranularEditor::resized()
@@ -607,13 +676,23 @@ void CloudLikeGranularEditor::resized()
     mixValueLabel.setBounds (mixKnobArea.withHeight (20).withY (mixKnobArea.getBottom() - 25));
     modeValueLabel.setBounds (modeKnobArea.withHeight (20).withY (modeKnobArea.getBottom() - 25));
 
-    // Row 3: TRIG Rate (centered, single knob)
-    auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
+    // Row 3: TRIG Rate (left), BPM display (center), TRIG button (right)
+    auto row3Content = row3.reduced (10, 0);
+    auto trigRateArea = row3Content.removeFromLeft (colWidth);
+    auto tapBpmArea = row3Content.removeFromLeft (colWidth * 0.8f).withSizeKeepingCentre (colWidth * 0.6f, colWidth * 0.6f);
+    auto trigButtonArea = row3Content.withSizeKeepingCentre (colWidth * 0.8f, 40);
+
     placeKnob (trigRateKnob, trigRateArea);
 
     // TRIG RATE value label (shows current division below the knob: 1/16, 1/8T, etc.)
     auto trigRateValueLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() - 25);
     trigRateValueLabel.setBounds (trigRateValueLabelArea);
+
+    // Tap BPM label (circular display like a knob)
+    tapBpmLabel.setBounds (tapBpmArea);
+
+    // TRIG button
+    trigButton.setBounds (trigButtonArea);
 
     // E-Paper UI: Buttons at bottom (3 buttons: TrigMode, Freeze, Randomize)
     // All buttons have equal size and spacing

@@ -483,6 +483,12 @@ private:
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
     double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED
 
+    // Tap tempo state (Manual mode)
+    std::atomic<double> lastTapTime { 0.0 };  // Time of last tap (seconds)
+    std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
+    std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
+    double tapTempoPhase = 0.0;  // Phase accumulator for tap tempo LED blink
+
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
     std::atomic<int> numActiveGrains { 0 };

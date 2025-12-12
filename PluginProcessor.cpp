@@ -662,9 +662,10 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             }
         }
 
-        // LED 1: MIDI note triggers in Manual mode
+        // LED 1: Tap tempo or MIDI note triggers in Manual mode
         bool currentMidiNoteState = false;
 
+        // Process MIDI triggers
         for (const auto metadata : midi)
         {
             auto message = metadata.getMessage();
@@ -680,6 +681,27 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                     triggerReceived.store(true);
                     baseTempoBlink.store(true);  // LED 1: MIDI trigger in Manual mode
                     lastMidiNoteState = currentMidiNoteState;
+                }
+            }
+        }
+
+        // LED 1: Tap tempo blink (if tap tempo is active)
+        if (tapTempoActive.load())
+        {
+            float tapBPM = detectedTapBPM.load();
+            if (tapBPM > 0.0f)
+            {
+                double beatsPerSecond = tapBPM / 60.0;
+                double phaseIncrement = beatsPerSecond / currentSampleRate;
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    tapTempoPhase += phaseIncrement;
+                    if (tapTempoPhase >= 1.0)
+                    {
+                        tapTempoPhase -= 1.0;
+                        baseTempoBlink.store(true);  // LED 1: Tap tempo blink
+                    }
                 }
             }
         }
