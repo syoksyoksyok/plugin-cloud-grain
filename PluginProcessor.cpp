@@ -1217,7 +1217,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             for (int bin = 0; bin < halfFFT; ++bin)
             {
                 int targetBin = static_cast<int>(bin * pitchRatio);
-                if (targetBin > 0 && targetBin < halfFFT)
+                if (targetBin >= 0 && targetBin < halfFFT)  // Allow DC component (targetBin = 0)
                 {
                     // Copy real and imaginary parts (OPTIMIZED: Bit shift for multiplication by 2)
                     int binIdx = bin << 1;
