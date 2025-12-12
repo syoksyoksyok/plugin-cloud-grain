@@ -1145,19 +1145,19 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== SPECTRAL MODE (Clouds STFT-style) ==========
+    // ========== SPECTRAL MODE (Clouds STFT-style continuous processing) ==========
     // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
     float pitchRatio = pitchToRatio(pitch);
     const int hopSize = fftSize >> 2;  // OPTIMIZED: Division by 4 using bit shift (512 samples)
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Force FFT frame reset (Clouds TRIG behavior)
+        // TRIG input: Add spectral glitches (Clouds-style frequency-domain corruption)
+        // Note: Does NOT interrupt basic processing, only adds effect
+        bool triggerGlitch = false;
         if (i == 0 && triggerReceived.load())
         {
-            spectralHopCounter = 0;
-            spectralBlockSize = 0;
-            spectralOutputPos = 0;
+            triggerGlitch = true;
             triggerReceived.store(false);
         }
 
@@ -1172,19 +1172,24 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
         }
 
-        // Increment hop counter and block size
+        // Increment counters
         spectralHopCounter++;
         spectralBlockSize++;
 
         // Process FFT every hopSize samples (Clouds STFT style)
-        if (spectralBlockSize >= hopSize)
+        // IMPORTANT: Only start after enough data has accumulated in ringBuffer
+        if (spectralBlockSize >= hopSize && spectralHopCounter >= fftSize)
         {
             spectralBlockSize = 0;  // Reset for next hop
 
-            // Read fftSize samples from ring buffer (sliding window approach)
+            // Read fftSize samples from ring buffer (always read backwards from writeHead)
+            // This ensures we always read valid data
             double readDelay = position * (bufferSize - fftSize);
-            int readStart = static_cast<int>(writeHead - readDelay - fftSize);
-            if (readStart < 0) readStart += bufferSize;
+            int readStart = writeHead - static_cast<int>(readDelay) - fftSize;
+
+            // Handle negative wrap-around with proper modulo
+            while (readStart < 0) readStart += bufferSize;
+            readStart = readStart & bufferSizeMask;  // OPTIMIZED: Bit mask
 
             // Fill FFT buffer with windowed samples from ring buffer
             for (int n = 0; n < fftSize; ++n)
@@ -1217,10 +1222,14 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
                     // Copy real and imaginary parts (OPTIMIZED: Bit shift for multiplication by 2)
                     int binIdx = bin << 1;
                     int targetIdx = targetBin << 1;
-                    spectralShiftedL[targetIdx] = fftDataL[binIdx];
-                    spectralShiftedL[targetIdx + 1] = fftDataL[binIdx + 1];
-                    spectralShiftedR[targetIdx] = fftDataR[binIdx];
-                    spectralShiftedR[targetIdx + 1] = fftDataR[binIdx + 1];
+
+                    // Apply trigger glitch: randomly zero out bins
+                    float glitchMask = triggerGlitch && (bin % 3 == 0) ? 0.0f : 1.0f;
+
+                    spectralShiftedL[targetIdx] = fftDataL[binIdx] * glitchMask;
+                    spectralShiftedL[targetIdx + 1] = fftDataL[binIdx + 1] * glitchMask;
+                    spectralShiftedR[targetIdx] = fftDataR[binIdx] * glitchMask;
+                    spectralShiftedR[targetIdx + 1] = fftDataR[binIdx + 1] * glitchMask;
                 }
             }
 
@@ -1241,7 +1250,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
 
         // Output from spectral buffer
-        if (spectralOutputPos < fftSize)
+        if (spectralOutputPos < fftSize && spectralHopCounter >= fftSize)
         {
             // Output with additional gain boost for audible results
             wetL[i] = spectralOutputL[spectralOutputPos] * 3.0f;
@@ -1269,7 +1278,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
         else
         {
-            // Fallback: pass through input (initial buffer fill)
+            // Initial buffer fill: pass through input with slight attenuation
             wetL[i] = inSampleL * 0.5f;
             wetR[i] = inSampleR * 0.5f;
         }
