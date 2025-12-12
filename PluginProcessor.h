@@ -305,7 +305,8 @@ private:
     juce::dsp::FFT forwardFFT { fftOrder };
     alignas(32) std::array<float, fftSize * 2> fftDataL;
     alignas(32) std::array<float, fftSize * 2> fftDataR;
-    int spectralInputPos = 0;      // Input accumulation position
+    int spectralHopCounter = 0;    // Counter for hop size (triggers FFT every hopSize samples)
+    int spectralBlockSize = 0;     // Accumulated samples in current block
     int spectralOutputPos = 0;     // Output read position
     alignas(32) std::array<float, fftSize * 2> spectralOutputL;  // Overlap-add buffer (needs 2x size)
     alignas(32) std::array<float, fftSize * 2> spectralOutputR;
