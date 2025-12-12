@@ -50,6 +50,14 @@ public:
     std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo or MIDI triggers
     std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo
 
+    // TRIG system state (public for UI access)
+    std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
+
+    // Tap tempo state (public for UI access in Manual mode)
+    std::atomic<double> lastTapTime { 0.0 };  // Time of last tap (seconds)
+    std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
+    std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
+
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     // Grain structure (public for potential visualization)
@@ -477,16 +485,10 @@ private:
     std::atomic<float> lastRandomizeValue { 0.0f };
     std::atomic<int> previousMode { 0 };  // Track mode changes for cleanup
 
-    // TRIG system state
-    std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
+    // TRIG system internal state (private)
     bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
     double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED
-
-    // Tap tempo state (Manual mode)
-    std::atomic<double> lastTapTime { 0.0 };  // Time of last tap (seconds)
-    std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
-    std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
     double tapTempoPhase = 0.0;  // Phase accumulator for tap tempo LED blink
 
     // Clouds-style density control
