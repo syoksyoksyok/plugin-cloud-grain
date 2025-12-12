@@ -2601,7 +2601,7 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
             }
 
             // Perform forward FFT
-            fft->performRealOnlyForwardTransform(fftBuffer->data());
+            forwardFFT.performRealOnlyForwardTransform(fftBuffer->data());
 
             // Process frequency bins (only up to Nyquist)
             for (int bin = 0; bin < fftSize / 2; ++bin)
@@ -2673,7 +2673,7 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
             }
 
             // Perform inverse FFT
-            fft->performRealOnlyInverseTransform(fftBuffer->data());
+            forwardFFT.performRealOnlyInverseTransform(fftBuffer->data());
 
             // Overlap-add to output buffer with Hann window
             for (int i = 0; i < fftSize && (frameStart + i) < numSamples; ++i)
