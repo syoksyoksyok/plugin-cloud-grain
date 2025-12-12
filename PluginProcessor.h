@@ -359,6 +359,27 @@ private:
     alignas(32) std::array<float, fftSize * 2> spectralShiftedL;
     alignas(32) std::array<float, fftSize * 2> spectralShiftedR;
 
+    // Spectral mode improvements (Clouds/SuperParasites-style)
+    // Option 4: TRIG spectral freeze
+    alignas(32) std::array<float, fftSize * 2> spectralFrozenL;
+    alignas(32) std::array<float, fftSize * 2> spectralFrozenR;
+    bool spectralFrozen = false;
+    float spectralFreezeAmount = 0.0f;
+
+    // Option 1: TEXTURE effects (blur/scramble/phase)
+    alignas(32) std::array<float, fftSize> spectralRandomPhase;  // Random phase table
+    alignas(32) std::array<int, fftSize> spectralScrambleMap;    // Bin scramble mapping
+
+    // Option 2: DENSITY band masking
+    alignas(32) std::array<float, 32> spectralBandMask;  // Max 32 bands
+    int spectralBandUpdateCounter = 0;  // Update band mask periodically
+
+    // Option 5: Phase vocoder (previous phase for interpolation)
+    alignas(32) std::array<float, fftSize> spectralPrevPhaseL;
+    alignas(32) std::array<float, fftSize> spectralPrevPhaseR;
+    alignas(32) std::array<float, fftSize> spectralPhaseAccumL;  // Accumulated phase
+    alignas(32) std::array<float, fftSize> spectralPhaseAccumR;
+
     // Oliverb mode state (Multi-tap reverb with modulation)
     struct OliverbTap
     {
@@ -455,7 +476,8 @@ private:
 
     void processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                                float* wetL, float* wetR,
-                               float position, float pitch,
+                               float position, float size, float pitch,
+                               float density, float texture,
                                float feedback, bool freeze);
 
     void processOliverbBlock (juce::AudioBuffer<float>& buffer, int numSamples,
