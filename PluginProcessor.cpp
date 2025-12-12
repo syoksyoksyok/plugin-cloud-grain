@@ -156,6 +156,30 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     spectralOutputL.fill(0.0f);
     spectralOutputR.fill(0.0f);
 
+    // Initialize Spectral mode improvements (Clouds/SuperParasites-style)
+    // Option 4: Spectral freeze
+    spectralFrozenL.fill(0.0f);
+    spectralFrozenR.fill(0.0f);
+    spectralFrozen = false;
+    spectralFreezeAmount = 0.0f;
+
+    // Option 1: Random phase and scramble map
+    for (int i = 0; i < fftSize; ++i)
+    {
+        spectralRandomPhase[i] = uniform(rng) * juce::MathConstants<float>::twoPi;
+        spectralScrambleMap[i] = i;  // Identity mapping initially
+    }
+
+    // Option 2: Band masking
+    spectralBandMask.fill(1.0f);
+    spectralBandUpdateCounter = 0;
+
+    // Option 5: Phase vocoder state
+    spectralPrevPhaseL.fill(0.0f);
+    spectralPrevPhaseR.fill(0.0f);
+    spectralPhaseAccumL.fill(0.0f);
+    spectralPhaseAccumR.fill(0.0f);
+
     // Initialize WSOLA state for Pitch Shifter mode
     for (int w = 0; w < 2; ++w)
     {
@@ -770,7 +794,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         case MODE_SPECTRAL:
             processSpectralBlock (buffer, numSamples, wetL, wetR,
-                                  position, pitch, effectiveFeedback, freeze);
+                                  position, size, pitch, density, texture,
+                                  effectiveFeedback, freeze);
             break;
 
         case MODE_OLIVERB:
@@ -1440,26 +1465,59 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
 
 void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>& buffer, int numSamples,
                                                        float* wetL, float* wetR,
-                                                       float position, float pitch,
+                                                       float position, float size, float pitch,
+                                                       float density, float texture,
                                                        float feedback, bool freeze)
 {
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== SPECTRAL MODE (Clouds STFT-style continuous processing) ==========
-    // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
+    // ========== SPECTRAL MADNESS MODE (Clouds/SuperParasites-style) ==========
+    // Improvements:
+    // 1. TEXTURE: Spectral blur/scramble/phase randomization
+    // 2. DENSITY: Frequency band masking (rhythmic spectral gating)
+    // 3. SIZE: Bit depth reduction/quantization (lo-fi effect)
+    // 4. TRIG: Spectral freeze with crossfade
+    // 5. Phase vocoder for natural pitch shifting
+    //
+    // SIZE: Amplitude quantization level
+    // POSITION: Buffer read delay
+    // PITCH: Pitch shift amount
+    // DENSITY: Number of frequency bands for masking
+    // TEXTURE: Spectral effect type (blur/phase/scramble)
+
+    // OPTIMIZATION: Calculate parameters once per block
     float pitchRatio = pitchToRatio(pitch);
-    const int hopSize = fftSize >> 2;  // OPTIMIZED: Division by 4 using bit shift (512 samples)
+    const int hopSize = fftSize >> 2;  // 512 samples
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Add spectral glitches (Clouds-style frequency-domain corruption)
-        // Note: Does NOT interrupt basic processing, only adds effect
-        bool triggerGlitch = false;
+        // === Option 4: TRIG spectral freeze (Clouds-style) ===
         if (i == 0 && triggerReceived.load())
         {
-            triggerGlitch = true;
             triggerReceived.store(false);
+
+            // Capture current spectrum to frozen buffer
+            std::copy(fftDataL.begin(), fftDataL.end(), spectralFrozenL.begin());
+            std::copy(fftDataR.begin(), fftDataR.end(), spectralFrozenR.begin());
+
+            // Activate freeze mode
+            spectralFrozen = true;
+
+            // Regenerate random phase table for new freeze
+            for (int p = 0; p < fftSize; ++p)
+                spectralRandomPhase[p] = uniform(rng) * juce::MathConstants<float>::twoPi;
+
+            // Generate new bin scramble mapping
+            for (int s = 0; s < fftSize; ++s)
+                spectralScrambleMap[s] = s;
+
+            // Fisher-Yates shuffle for bin scrambling
+            for (int s = fftSize - 1; s > 0; --s)
+            {
+                int j = static_cast<int>(uniform(rng) * (s + 1));
+                std::swap(spectralScrambleMap[s], spectralScrambleMap[j]);
+            }
         }
 
         float inSampleL = inL[i];
@@ -1470,38 +1528,51 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            writeHead = (writeHead + 1) & bufferSizeMask;
         }
 
         // Increment counters
         spectralHopCounter++;
         spectralBlockSize++;
 
-        // Process FFT every hopSize samples (Clouds STFT style)
-        // IMPORTANT: Only start after enough data has accumulated in ringBuffer
+        // === Option 2: Update band mask periodically ===
+        spectralBandUpdateCounter++;
+        if (spectralBandUpdateCounter >= hopSize)
+        {
+            spectralBandUpdateCounter = 0;
+
+            // Generate new random band mask based on DENSITY
+            int numBands = 2 + static_cast<int>(density * 30.0f);  // 2 to 32 bands
+            numBands = juce::jlimit(2, 32, numBands);
+
+            for (int band = 0; band < numBands; ++band)
+            {
+                // Random mask: 50% chance to pass, 50% to mute
+                spectralBandMask[band] = (uniform(rng) > 0.5f) ? 1.0f : 0.0f;
+            }
+        }
+
+        // Process FFT every hopSize samples
         if (spectralBlockSize >= hopSize && spectralHopCounter >= fftSize)
         {
-            spectralBlockSize = 0;  // Reset for next hop
+            spectralBlockSize = 0;
 
-            // Read fftSize samples from ring buffer (always read backwards from writeHead)
-            // This ensures we always read valid data
+            // Read from ring buffer
             double readDelay = position * (bufferSize - fftSize);
             int readStart = writeHead - static_cast<int>(readDelay) - fftSize;
 
-            // Handle negative wrap-around with proper modulo
             while (readStart < 0) readStart += bufferSize;
-            readStart = readStart & bufferSizeMask;  // OPTIMIZED: Bit mask
+            readStart = readStart & bufferSizeMask;
 
-            // Fill FFT buffer with windowed samples from ring buffer
+            // Fill FFT buffer with windowed samples
             for (int n = 0; n < fftSize; ++n)
             {
-                int readPos = (readStart + n) & bufferSizeMask;  // OPTIMIZED: Bit mask
+                int readPos = (readStart + n) & bufferSizeMask;
                 float window = hannWindow(n, fftSize);
                 fftDataL[n] = ringBuffer.getSample(0, readPos) * window;
                 fftDataR[n] = ringBuffer.getSample(1, readPos) * window;
             }
 
-            // Zero pad the second half for complex FFT (OPTIMIZED: Use std::fill)
             std::fill(fftDataL.begin() + fftSize, fftDataL.end(), 0.0f);
             std::fill(fftDataR.begin() + fftSize, fftDataR.end(), 0.0f);
 
@@ -1509,28 +1580,157 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             forwardFFT.performRealOnlyForwardTransform(fftDataL.data());
             forwardFFT.performRealOnlyForwardTransform(fftDataR.data());
 
-            // OPTIMIZATION: Use member buffers instead of stack allocation
+            // === Option 4: Blend with frozen spectrum ===
+            if (spectralFrozen)
+            {
+                float freezeBlend = freeze ? 0.95f : 0.7f;
+                for (int bin = 0; bin < fftSize * 2; ++bin)
+                {
+                    fftDataL[bin] = fftDataL[bin] * (1.0f - freezeBlend) + spectralFrozenL[bin] * freezeBlend;
+                    fftDataR[bin] = fftDataR[bin] * (1.0f - freezeBlend) + spectralFrozenR[bin] * freezeBlend;
+                }
+            }
+
             spectralShiftedL.fill(0.0f);
             spectralShiftedR.fill(0.0f);
 
-            // Shift frequency bins based on pitch ratio (OPTIMIZED: Bit shift)
-            const int halfFFT = fftSize >> 1;  // OPTIMIZED: Pre-calculate
+            const int halfFFT = fftSize >> 1;
+            const float twoPi = juce::MathConstants<float>::twoPi;
+
+            // === Option 5: Phase vocoder for pitch shifting ===
             for (int bin = 0; bin < halfFFT; ++bin)
             {
-                int targetBin = static_cast<int>(bin * pitchRatio);
-                if (targetBin >= 0 && targetBin < halfFFT)  // Allow DC component (targetBin = 0)
+                int binIdx = bin << 1;
+
+                // Extract magnitude and phase from FFT data
+                float realL = fftDataL[binIdx];
+                float imagL = fftDataL[binIdx + 1];
+                float realR = fftDataR[binIdx];
+                float imagR = fftDataR[binIdx + 1];
+
+                float magnitudeL = std::sqrt(realL * realL + imagL * imagL);
+                float magnitudeR = std::sqrt(realR * realR + imagR * imagR);
+
+                float phaseL = std::atan2(imagL, realL);
+                float phaseR = std::atan2(imagR, realR);
+
+                // === Option 3: SIZE - Amplitude quantization (lo-fi effect) ===
+                if (size < 0.5f)
                 {
-                    // Copy real and imaginary parts (OPTIMIZED: Bit shift for multiplication by 2)
-                    int binIdx = bin << 1;
+                    // Low SIZE = more quantization = lo-fi
+                    int quantLevels = 4 + static_cast<int>((0.5f - size) * 2.0f * 28.0f);  // 4 to 32 levels
+                    magnitudeL = std::floor(magnitudeL * quantLevels) / quantLevels;
+                    magnitudeR = std::floor(magnitudeR * quantLevels) / quantLevels;
+                }
+
+                // Phase vocoder: compute phase difference
+                float phaseDiffL = phaseL - spectralPrevPhaseL[bin];
+                float phaseDiffR = phaseR - spectralPrevPhaseR[bin];
+
+                // Wrap phase difference to [-π, π]
+                while (phaseDiffL > juce::MathConstants<float>::pi) phaseDiffL -= twoPi;
+                while (phaseDiffL < -juce::MathConstants<float>::pi) phaseDiffL += twoPi;
+                while (phaseDiffR > juce::MathConstants<float>::pi) phaseDiffR -= twoPi;
+                while (phaseDiffR < -juce::MathConstants<float>::pi) phaseDiffR += twoPi;
+
+                spectralPrevPhaseL[bin] = phaseL;
+                spectralPrevPhaseR[bin] = phaseR;
+
+                // Compute instantaneous frequency
+                float expectedPhaseInc = (twoPi * bin) / fftSize;
+                float freqDeviationL = (phaseDiffL - expectedPhaseInc) / hopSize;
+                float freqDeviationR = (phaseDiffR - expectedPhaseInc) / hopSize;
+
+                // Calculate target bin for pitch shifting
+                int targetBin = static_cast<int>(bin * pitchRatio);
+
+                if (targetBin >= 0 && targetBin < halfFFT)
+                {
+                    // Update accumulated phase for target bin
+                    spectralPhaseAccumL[targetBin] += (expectedPhaseInc + freqDeviationL) * pitchRatio;
+                    spectralPhaseAccumR[targetBin] += (expectedPhaseInc + freqDeviationR) * pitchRatio;
+
+                    // Wrap accumulated phase
+                    while (spectralPhaseAccumL[targetBin] > twoPi) spectralPhaseAccumL[targetBin] -= twoPi;
+                    while (spectralPhaseAccumL[targetBin] < -twoPi) spectralPhaseAccumL[targetBin] += twoPi;
+                    while (spectralPhaseAccumR[targetBin] > twoPi) spectralPhaseAccumR[targetBin] -= twoPi;
+                    while (spectralPhaseAccumR[targetBin] < -twoPi) spectralPhaseAccumR[targetBin] += twoPi;
+
+                    float outPhaseL = spectralPhaseAccumL[targetBin];
+                    float outPhaseR = spectralPhaseAccumR[targetBin];
+
+                    // === Option 1: TEXTURE effects ===
+                    if (texture < 0.33f)
+                    {
+                        // Spectral blur: average with neighboring bins
+                        float blurAmount = (0.33f - texture) * 3.0f;
+
+                        if (bin > 0 && bin < halfFFT - 1)
+                        {
+                            int prevBinIdx = (bin - 1) << 1;
+                            int nextBinIdx = (bin + 1) << 1;
+
+                            float prevMagL = std::sqrt(fftDataL[prevBinIdx] * fftDataL[prevBinIdx] +
+                                                      fftDataL[prevBinIdx + 1] * fftDataL[prevBinIdx + 1]);
+                            float nextMagL = std::sqrt(fftDataL[nextBinIdx] * fftDataL[nextBinIdx] +
+                                                      fftDataL[nextBinIdx + 1] * fftDataL[nextBinIdx + 1]);
+
+                            float blurredMagL = (prevMagL + magnitudeL + nextMagL) / 3.0f;
+                            magnitudeL = magnitudeL * (1.0f - blurAmount) + blurredMagL * blurAmount;
+
+                            float prevMagR = std::sqrt(fftDataR[prevBinIdx] * fftDataR[prevBinIdx] +
+                                                      fftDataR[prevBinIdx + 1] * fftDataR[prevBinIdx + 1]);
+                            float nextMagR = std::sqrt(fftDataR[nextBinIdx] * fftDataR[nextBinIdx] +
+                                                      fftDataR[nextBinIdx + 1] * fftDataR[nextBinIdx + 1]);
+
+                            float blurredMagR = (prevMagR + magnitudeR + nextMagR) / 3.0f;
+                            magnitudeR = magnitudeR * (1.0f - blurAmount) + blurredMagR * blurAmount;
+                        }
+                    }
+                    else if (texture < 0.66f)
+                    {
+                        // Random phase modulation
+                        float phaseModAmount = (texture - 0.33f) * 3.0f;
+                        outPhaseL += spectralRandomPhase[bin] * phaseModAmount;
+                        outPhaseR += spectralRandomPhase[bin] * phaseModAmount;
+                    }
+                    else
+                    {
+                        // Bin scrambling: use scrambled bin index
+                        float scrambleAmount = (texture - 0.66f) * 3.0f;
+
+                        if (scrambleAmount > 0.5f && bin < halfFFT)
+                        {
+                            int scrambledBin = spectralScrambleMap[bin];
+                            if (scrambledBin >= 0 && scrambledBin < halfFFT)
+                            {
+                                int scrambledIdx = scrambledBin << 1;
+                                float scrambledMagL = std::sqrt(fftDataL[scrambledIdx] * fftDataL[scrambledIdx] +
+                                                               fftDataL[scrambledIdx + 1] * fftDataL[scrambledIdx + 1]);
+                                float scrambledMagR = std::sqrt(fftDataR[scrambledIdx] * fftDataR[scrambledIdx] +
+                                                               fftDataR[scrambledIdx + 1] * fftDataR[scrambledIdx + 1]);
+
+                                magnitudeL = magnitudeL * (1.0f - scrambleAmount) + scrambledMagL * scrambleAmount;
+                                magnitudeR = magnitudeR * (1.0f - scrambleAmount) + scrambledMagR * scrambleAmount;
+                            }
+                        }
+                    }
+
+                    // === Option 2: DENSITY band masking ===
+                    int numBands = 2 + static_cast<int>(density * 30.0f);
+                    numBands = juce::jlimit(2, 32, numBands);
+                    int bandIndex = (bin * numBands) / halfFFT;
+                    float bandMask = spectralBandMask[bandIndex];
+
+                    magnitudeL *= bandMask;
+                    magnitudeR *= bandMask;
+
+                    // Convert back to complex representation
                     int targetIdx = targetBin << 1;
-
-                    // Apply trigger glitch: randomly zero out bins
-                    float glitchMask = triggerGlitch && (bin % 3 == 0) ? 0.0f : 1.0f;
-
-                    spectralShiftedL[targetIdx] = fftDataL[binIdx] * glitchMask;
-                    spectralShiftedL[targetIdx + 1] = fftDataL[binIdx + 1] * glitchMask;
-                    spectralShiftedR[targetIdx] = fftDataR[binIdx] * glitchMask;
-                    spectralShiftedR[targetIdx + 1] = fftDataR[binIdx + 1] * glitchMask;
+                    spectralShiftedL[targetIdx] += magnitudeL * std::cos(outPhaseL);
+                    spectralShiftedL[targetIdx + 1] += magnitudeL * std::sin(outPhaseL);
+                    spectralShiftedR[targetIdx] += magnitudeR * std::cos(outPhaseR);
+                    spectralShiftedR[targetIdx + 1] += magnitudeR * std::sin(outPhaseR);
                 }
             }
 
@@ -1538,13 +1738,11 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             forwardFFT.performRealOnlyInverseTransform(spectralShiftedL.data());
             forwardFFT.performRealOnlyInverseTransform(spectralShiftedR.data());
 
-            // Overlap-Add: accumulate to output buffer with Hann window (OPTIMIZED: LUT)
-            // Gain compensation for 75% overlap (hopSize = fftSize/4)
-            float normGain = 4.0f / fftSize;  // Compensate for windowing
+            // Overlap-Add synthesis
+            float normGain = 4.0f / fftSize;
             for (int n = 0; n < fftSize; ++n)
             {
                 float window = hannWindow(n, fftSize);
-                // Apply window and accumulate (Overlap-Add synthesis)
                 spectralOutputL[n] += spectralShiftedL[n] * normGain * window;
                 spectralOutputR[n] += spectralShiftedR[n] * normGain * window;
             }
@@ -1553,22 +1751,19 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         // Output from spectral buffer
         if (spectralOutputPos < fftSize && spectralHopCounter >= fftSize)
         {
-            // Output with additional gain boost for audible results
             wetL[i] = spectralOutputL[spectralOutputPos] * 3.0f;
             wetR[i] = spectralOutputR[spectralOutputPos] * 3.0f;
 
             spectralOutputPos++;
 
-            // Shift output buffer when we've consumed one hop worth of samples
             if (spectralOutputPos == hopSize)
             {
-                // Shift buffer left by hopSize for next overlap-add frame
+                // Shift output buffer
                 for (int n = 0; n < fftSize - hopSize; ++n)
                 {
                     spectralOutputL[n] = spectralOutputL[n + hopSize];
                     spectralOutputR[n] = spectralOutputR[n + hopSize];
                 }
-                // Clear the newly exposed section
                 for (int n = fftSize - hopSize; n < fftSize; ++n)
                 {
                     spectralOutputL[n] = 0.0f;
@@ -1579,7 +1774,6 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         }
         else
         {
-            // Initial buffer fill: pass through input with slight attenuation
             wetL[i] = inSampleL * 0.5f;
             wetR[i] = inSampleR * 0.5f;
         }
