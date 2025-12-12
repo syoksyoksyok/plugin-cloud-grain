@@ -369,7 +369,10 @@ void CloudLikeGranularEditor::updateKnobValueLabels(int mode, float position, fl
     juce::String spreadValueText = juce::String(static_cast<int>(spread * 100.0f)) + "%";
     juce::String feedbackValueText = juce::String(static_cast<int>(feedback * 100.0f)) + "%";
     juce::String reverbValueText = juce::String(static_cast<int>(reverb * 100.0f)) + "%";
-    juce::String mixValueText = juce::String(static_cast<int>(mix * 100.0f)) + "%";
+
+    // Kill Dry: Show 100% when button is pressed
+    bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
+    juce::String mixValueText = killDry ? "100%" : juce::String(static_cast<int>(mix * 100.0f)) + "%";
 
     if (positionValueLabel.getText() != posValueText) positionValueLabel.setText(posValueText, juce::dontSendNotification);
     if (sizeValueLabel.getText() != sizeValueText) sizeValueLabel.setText(sizeValueText, juce::dontSendNotification);
