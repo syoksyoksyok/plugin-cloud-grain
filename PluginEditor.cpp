@@ -225,6 +225,7 @@ void CloudLikeGranularEditor::timerCallback()
         case 4: modeValueText = "Oliverb"; break;
         case 5: modeValueText = "Resonstr"; break;
         case 6: modeValueText = "BeatRpt"; break;
+        case 7: modeValueText = "SpctrlCld"; break;  // Spectral Clouds
         default: modeValueText = "Unknown"; break;
     }
     if (modeValueLabel.getText() != modeValueText)
@@ -291,6 +292,14 @@ void CloudLikeGranularEditor::timerCallback()
             pitchLabel = "Speed";
             densityLabel = "Rate";
             textureLabel = "Stutter";
+            break;
+
+        case 7: // Spectral Clouds
+            posLabel = "Filter";
+            sizeLabel = "Bands";
+            pitchLabel = "Pitch";
+            densityLabel = "Smooth";
+            textureLabel = "Phase";
             break;
 
         default:
