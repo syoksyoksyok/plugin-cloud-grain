@@ -524,6 +524,27 @@ float CloudLikeGranularProcessor::computeOverlap (float density) const
     return juce::jlimit (0.0f, 1.0f, overlap);
 }
 
+// TRIG rate to note value conversion (refactored from duplicate code)
+double CloudLikeGranularProcessor::calculateNoteValueFromTrigRate(float trigRate)
+{
+    // TRIG RATE parameter range: -4.0 to +4.0
+    // Negative = divisions (1/16, 1/8, 1/4, etc.)
+    // Positive = multiplications (1/2, 1 bar, 2 bars, etc.)
+    // Includes triplet patterns: 1/16T, 1/8T, 1/4T, 1/2T, 1barT
+
+    if (trigRate < -3.4f)      return 1.0 / 16.0;   // 1/16 note
+    else if (trigRate < -2.8f) return 1.0 / 12.0;   // 1/16 triplet
+    else if (trigRate < -2.2f) return 1.0 / 8.0;    // 1/8 note
+    else if (trigRate < -1.6f) return 1.0 / 6.0;    // 1/8 triplet
+    else if (trigRate < -0.8f) return 1.0 / 4.0;    // 1/4 note
+    else if (trigRate < 0.0f)  return 1.0 / 3.0;    // 1/4 triplet
+    else if (trigRate < 0.8f)  return 1.0 / 2.0;    // 1/2 note
+    else if (trigRate < 1.6f)  return 1.0 / 1.5;    // 1/2 triplet
+    else if (trigRate < 2.4f)  return 1.0;          // 1 bar
+    else if (trigRate < 3.2f)  return 4.0 / 3.0;    // 1 bar triplet
+    else                       return 2.0;          // 2 bars
+}
+
 // Helper function to initialize a grain (reduces code duplication)
 void CloudLikeGranularProcessor::initializeGrain (Grain& g, int channel, double baseStart,
                                                   double durationSamps, double pitchRatio,
@@ -641,22 +662,7 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             {
                 double bpm = *posInfo->getBpm();
                 float trigRate = apvts.getRawParameterValue ("trigRate")->load();
-
-                // Calculate note value based on TRIG RATE parameter
-                // Updated with more triplet patterns: 1/16, 1/16T, 1/8, 1/8T, 1/4, 1/4T, 1/2, 1/2T, 1bar, 1barT, 2bars
-                double noteValue = 0.25;  // Quarter note base
-
-                if (trigRate < -3.4f)      noteValue = 1.0 / 16.0;  // 1/16 note
-                else if (trigRate < -2.8f) noteValue = 1.0 / 12.0;  // 1/16 triplet
-                else if (trigRate < -2.2f) noteValue = 1.0 / 8.0;   // 1/8 note
-                else if (trigRate < -1.6f) noteValue = 1.0 / 6.0;   // 1/8 triplet
-                else if (trigRate < -0.8f) noteValue = 1.0 / 4.0;   // 1/4 note
-                else if (trigRate < 0.0f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
-                else if (trigRate < 0.8f)  noteValue = 1.0 / 2.0;   // 1/2 note
-                else if (trigRate < 1.6f)  noteValue = 1.0 / 1.5;   // 1/2 triplet (NEW)
-                else if (trigRate < 2.4f)  noteValue = 1.0;         // 1 bar
-                else if (trigRate < 3.2f)  noteValue = 4.0 / 3.0;   // 1 bar triplet (NEW)
-                else                       noteValue = 2.0;         // 2 bars
+                double noteValue = calculateNoteValueFromTrigRate(trigRate);
 
                 double beatsPerSecond = bpm / 60.0;
                 double triggersPerSecond = beatsPerSecond / (noteValue * 4.0);
@@ -733,26 +739,8 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 hostBPM.store(static_cast<float>(bpm));  // Store for UI display
                 float trigRate = apvts.getRawParameterValue ("trigRate")->load();
 
-                // Calculate trigger frequency in Hz based on trigRate parameter
-                // trigRate: -4.0 to +4.0
-                // Center (0) = 1/4 note
-                // Negative = divisions (1/8, 1/16, etc.)
-                // Positive = multiplications (1/2, 1 bar, 2 bars, etc.)
-                // Updated with more triplet patterns: 1/16, 1/16T, 1/8, 1/8T, 1/4, 1/4T, 1/2, 1/2T, 1bar, 1barT, 2bars
-
-                double noteValue = 0.25;  // Quarter note base
-
-                if (trigRate < -3.4f)      noteValue = 1.0 / 16.0;  // 1/16 note
-                else if (trigRate < -2.8f) noteValue = 1.0 / 12.0;  // 1/16 triplet
-                else if (trigRate < -2.2f) noteValue = 1.0 / 8.0;   // 1/8 note
-                else if (trigRate < -1.6f) noteValue = 1.0 / 6.0;   // 1/8 triplet
-                else if (trigRate < -0.8f) noteValue = 1.0 / 4.0;   // 1/4 note
-                else if (trigRate < 0.0f)  noteValue = 1.0 / 3.0;   // 1/4 triplet
-                else if (trigRate < 0.8f)  noteValue = 1.0 / 2.0;   // 1/2 note
-                else if (trigRate < 1.6f)  noteValue = 1.0 / 1.5;   // 1/2 triplet (NEW)
-                else if (trigRate < 2.4f)  noteValue = 1.0;         // 1 bar
-                else if (trigRate < 3.2f)  noteValue = 4.0 / 3.0;   // 1 bar triplet (NEW)
-                else                       noteValue = 2.0;         // 2 bars
+                // Calculate note value from TRIG RATE parameter
+                double noteValue = calculateNoteValueFromTrigRate(trigRate);
 
                 // Calculate frequency: triggers per second
                 double beatsPerSecond = bpm / 60.0;
@@ -1002,21 +990,11 @@ void CloudLikeGranularProcessor::processGranularBlock (juce::AudioBuffer<float>&
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         // TRIG input: Force grain generation (Clouds TRIG behavior)
         // When TRIG is received, generate 1 grain based on POSITION/SIZE, bypassing density
-        bool manualTrigger = false;
-        if (i == 0 && triggerReceived.load())  // Check trigger at start of block
-        {
-            manualTrigger = true;
-            triggerReceived.store(false);  // Clear trigger flag
-        }
+        bool manualTrigger = checkAndClearTrigger(i);
 
         // Clouds-style grain triggering (automatic, based on density)
         bool triggerGrain = manualTrigger;  // Manual TRIG always triggers
@@ -1192,10 +1170,8 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
     {
         // === Option 1: Envelope-based smooth trigger response ===
         // TRIG input: Smoothly ramp to new position (Clouds-style envelope)
-        if (i == 0 && triggerReceived.load())
+        if (checkAndClearTrigger(i))
         {
-            triggerReceived.store(false);
-
             // Calculate elapsed samples since last trigger for smooth envelope
             int elapsed = juce::jmax(1, wsolaElapsed);
 
@@ -1222,12 +1198,7 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         // === Option 2: Dual-window overlap-add system ===
         // Process two overlapping windows for continuous smooth output
@@ -1389,10 +1360,8 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
     for (int i = 0; i < numSamples; ++i)
     {
         // === Option 2: TRIG loop capture with envelope (Clouds-style) ===
-        if (i == 0 && triggerReceived.load())
+        if (checkAndClearTrigger(i))
         {
-            triggerReceived.store(false);
-
             // Capture current loop segment to dedicated buffer
             loopCaptureLength = juce::jmin(targetLoopLength, static_cast<int>(loopCaptureBufferL.size()));
 
@@ -1457,12 +1426,7 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         loopFeedbackFilter.previousR = feedbackR;
 
         // Write to ring buffer with filtered feedback
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample(0, writeHead, inSampleL + feedbackL);
-            ringBuffer.setSample(1, writeHead, inSampleR + feedbackR);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, feedbackL, feedbackR, freeze);
 
         // Smoothly interpolate loop length per sample
         float t = static_cast<float>(i) / numSamples;
@@ -1621,10 +1585,8 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
     for (int i = 0; i < numSamples; ++i)
     {
         // === Option 4: TRIG spectral freeze (Clouds-style) ===
-        if (i == 0 && triggerReceived.load())
+        if (checkAndClearTrigger(i))
         {
-            triggerReceived.store(false);
-
             // Capture current spectrum to frozen buffer
             std::copy(fftDataL.begin(), fftDataL.end(), spectralFrozenL.begin());
             std::copy(fftDataR.begin(), fftDataR.end(), spectralFrozenR.begin());
@@ -1652,12 +1614,7 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
         float inSampleR = inR ? inR[i] : inSampleL;
 
         // Write input to ring buffer with feedback
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         // Increment counters
         spectralHopCounter++;
@@ -1946,10 +1903,8 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
     for (int i = 0; i < numSamples; ++i)
     {
         // === Option 4: TRIG reverb freeze (Clouds-style) ===
-        if (i == 0 && triggerReceived.load())
+        if (checkAndClearTrigger(i))
         {
-            triggerReceived.store(false);
-
             // Toggle freeze mode
             oliverbFrozen = !oliverbFrozen;
 
@@ -1979,12 +1934,7 @@ void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& 
         float inSampleR = inR ? inR[i] : inSampleL;
 
         // Write to ring buffer with feedback
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         float outputL = 0.0f;
         float outputR = 0.0f;
@@ -2181,12 +2131,7 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
 
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         // Burst envelope (Clouds-style smooth decay)
         float burstGain = resonestorBurstEnvelope;
@@ -2322,9 +2267,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
     for (int i = 0; i < numSamples; ++i)
     {
         // === Trigger detection ===
-        bool currentTrigger = (i == 0 && triggerReceived.load());
-        if (currentTrigger)
-            triggerReceived.store(false);
+        bool currentTrigger = checkAndClearTrigger(i);
 
         // === Always count samples since last trigger (Kammerl-style) ===
         beatRepeat.numSamplesSinceTrigger++;
@@ -2333,12 +2276,7 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         float inSampleR = inR ? inR[i] : inSampleL;
 
         // === Write to ring buffer (with feedback) ===
-        if (!freeze && bufferSize > 0)
-        {
-            ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
-            ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;
-        }
+        writeToRingBuffer(inSampleL, inSampleR, wetL[i] * feedback, wetR[i] * feedback, freeze);
 
         // === Trigger processing (Kammerl-style interval measurement) ===
         if (currentTrigger)
