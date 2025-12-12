@@ -2535,7 +2535,19 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
     // Update state
     spectralClouds.numFreqBands = numFreqBands;
     spectralClouds.parameterLowpass = parameterLowpass;
-    spectralClouds.frozen = freeze;
+
+    // Freeze state management
+    bool previouslyFrozen = spectralClouds.frozen;
+    if (freeze && !previouslyFrozen)
+    {
+        // Entering freeze: will capture magnitude on first frame
+        spectralClouds.frozen = false;
+    }
+    else if (!freeze && previouslyFrozen)
+    {
+        // Exiting freeze: clear frozen state
+        spectralClouds.frozen = false;
+    }
 
     // Trigger detection: regenerate random band gains on trigger edge
     bool currentTrigger = triggerReceived.load();
@@ -2582,7 +2594,6 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
         for (int frame = 0; frame < numFrames; ++frame)
         {
             int frameStart = frame * hopSize;
-            int frameSamples = std::min(hopSize, numSamples - frameStart);
 
             // Fill FFT buffer with input (zero-padded if needed)
             for (int i = 0; i < fftSize; ++i)
@@ -2616,15 +2627,15 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
                 // Freeze or update magnitude
                 if (freeze)
                 {
-                    if (spectralClouds.frozen)
-                    {
-                        // Use frozen magnitude
-                        magnitude = (*frozenMagnitude)[bin];
-                    }
-                    else
+                    if (!spectralClouds.frozen)
                     {
                         // First frame of freeze: store current magnitude
                         (*frozenMagnitude)[bin] = magnitude;
+                    }
+                    else
+                    {
+                        // Use frozen magnitude (time-stretch effect)
+                        magnitude = (*frozenMagnitude)[bin];
                     }
                 }
 
@@ -2680,6 +2691,12 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
             {
                 float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (fftSize - 1)));
                 output[frameStart + i] += (*fftBuffer)[i] * window * 0.5f;  // 0.5f: normalize for overlap
+            }
+
+            // Mark freeze as active after first frame capture
+            if (freeze && !spectralClouds.frozen)
+            {
+                spectralClouds.frozen = true;
             }
         }
     }
