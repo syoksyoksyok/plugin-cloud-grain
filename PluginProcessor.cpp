@@ -271,15 +271,42 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     oliverbDiffuserR3.setDelay(397);
     oliverbDiffuserR4.setDelay(281);
 
-    // Initialize Resonestor resonators (Karplus-Strong)
-    const std::array<float, maxResonators> resonatorFreqs = {
-        82.41f, 110.0f, 146.83f, 196.0f, 246.94f, 329.63f,  // E2, A2, D3, G3, B3, E4
-        392.0f, 493.88f, 587.33f, 659.25f, 783.99f, 987.77f  // G4, B4, D5, E5, G5, B5
-    };
+    // Initialize Resonestor resonators (Karplus-Strong - Clouds/SuperParasites-style)
+    // Option 3: Define 6 chord presets
+    const std::array<std::array<float, maxResonators>, numChordPresets> chordPresets = {{
+        // Preset 0: Major chord (C major voicing)
+        {130.81f, 164.81f, 196.00f, 261.63f, 329.63f, 392.00f,
+         523.25f, 659.25f, 783.99f, 1046.50f, 1318.51f, 1567.98f},
+
+        // Preset 1: Minor chord (C minor voicing)
+        {130.81f, 155.56f, 196.00f, 261.63f, 311.13f, 392.00f,
+         523.25f, 622.25f, 783.99f, 1046.50f, 1244.51f, 1567.98f},
+
+        // Preset 2: Power chord (C power chord - 5ths)
+        {65.41f, 98.00f, 130.81f, 196.00f, 261.63f, 392.00f,
+         523.25f, 783.99f, 1046.50f, 1567.98f, 2093.00f, 3135.96f},
+
+        // Preset 3: Octaves (C octaves)
+        {65.41f, 130.81f, 261.63f, 523.25f, 1046.50f, 2093.00f,
+         65.41f, 130.81f, 261.63f, 523.25f, 1046.50f, 2093.00f},
+
+        // Preset 4: Pentatonic (C pentatonic)
+        {130.81f, 146.83f, 164.81f, 196.00f, 220.00f, 261.63f,
+         293.66f, 329.63f, 392.00f, 440.00f, 523.25f, 587.33f},
+
+        // Preset 5: Harmonic series (from C2)
+        {65.41f, 130.81f, 196.00f, 261.63f, 329.63f, 392.00f,
+         457.69f, 523.25f, 587.33f, 659.25f, 726.53f, 783.99f}
+    }};
+
+    // Initialize with first chord preset
+    resonestorCurrentChord = 0;
+    const auto& initialFreqs = chordPresets[0];
+
     for (int i = 0; i < maxResonators; ++i)
     {
         // OPTIMIZATION: Round to power of 2 for bit masking
-        int requestedLength = static_cast<int>(sampleRate / resonatorFreqs[i]);
+        int requestedLength = static_cast<int>(sampleRate / initialFreqs[i]);
         int delayLength = 1;
         while (delayLength < requestedLength)
             delayLength <<= 1;  // Find next power of 2
@@ -290,7 +317,24 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
         resonators[i].feedback = 0.99f;
         resonators[i].brightness = 0.5f;
         resonators[i].active = false;
+
+        // Option 5: Store base frequency
+        resonators[i].frequency = initialFreqs[i];
+
+        // Option 2: Initialize stereo panning
+        float angle = (static_cast<float>(i) / maxResonators) * juce::MathConstants<float>::pi;
+        resonators[i].panL = std::cos(angle);
+        resonators[i].panR = std::sin(angle);
+
+        // Option 4: Initialize filter state
+        resonators[i].z1 = 0.0f;
+        resonators[i].z2 = 0.0f;
     }
+
+    // Initialize burst envelope
+    resonestorBurstEnvelope = 0.0f;
+    resonestorBurstDecay = 0.9995f;
+    resonestorPreviousTrigger = false;
 
     // Initialize Beat Repeat buffer (1 bar at 120 BPM = 2 seconds)
     int beatRepeatSize = static_cast<int>(sampleRate * 2.0);
@@ -1984,30 +2028,92 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== RESONESTOR MODE (Parasites-style) ==========
-    // Parameters mapped to Parasites control scheme
-    float excitationAmount = position;  // Excitation intensity
-    float decayTime = size;             // Resonator decay time
-    float pitchShift = pitch;           // Pitch shift (-24 to +24 semitones)
-    float burstDuration = density * 2.0f;  // Burst duration (0 to 2.0)
-    float brightness = texture;         // Filter brightness
-    float decay = 0.95f + decayTime * 0.045f;  // 0.95 to 0.995
-    float damping = 0.3f + brightness * 0.7f;  // 0.3 to 1.0 (lower = darker)
+    // ========== RESONESTOR MODE (Clouds/SuperParasites-style improvements) ==========
+    // Improvements:
+    // 1. DENSITY active resonator count (2-12)
+    // 2. Stereo spread with individual panning
+    // 3. TRIG chord preset switching (6 presets)
+    // 4. Two-pole lowpass filter for damping
+    // 5. Modal synthesis (excitation position controls mode strength)
+    //
+    // POSITION: Excitation position (modal synthesis)
+    // SIZE: Decay time
+    // PITCH: Pitch shift
+    // DENSITY: Number of active resonators (2-12)
+    // TEXTURE: Filter brightness
+    // TRIG: Chord preset switching
+    // FREEZE: Hold resonator state
 
-    // Convert pitch shift to playback rate
+    // Option 3: Define chord presets (must be in function for access)
+    const std::array<std::array<float, maxResonators>, numChordPresets> chordPresets = {{
+        // Preset 0: Major chord
+        {130.81f, 164.81f, 196.00f, 261.63f, 329.63f, 392.00f,
+         523.25f, 659.25f, 783.99f, 1046.50f, 1318.51f, 1567.98f},
+        // Preset 1: Minor chord
+        {130.81f, 155.56f, 196.00f, 261.63f, 311.13f, 392.00f,
+         523.25f, 622.25f, 783.99f, 1046.50f, 1244.51f, 1567.98f},
+        // Preset 2: Power chord
+        {65.41f, 98.00f, 130.81f, 196.00f, 261.63f, 392.00f,
+         523.25f, 783.99f, 1046.50f, 1567.98f, 2093.00f, 3135.96f},
+        // Preset 3: Octaves
+        {65.41f, 130.81f, 261.63f, 523.25f, 1046.50f, 2093.00f,
+         65.41f, 130.81f, 261.63f, 523.25f, 1046.50f, 2093.00f},
+        // Preset 4: Pentatonic
+        {130.81f, 146.83f, 164.81f, 196.00f, 220.00f, 261.63f,
+         293.66f, 329.63f, 392.00f, 440.00f, 523.25f, 587.33f},
+        // Preset 5: Harmonic series
+        {65.41f, 130.81f, 196.00f, 261.63f, 329.63f, 392.00f,
+         457.69f, 523.25f, 587.33f, 659.25f, 726.53f, 783.99f}
+    }};
+
+    // Parameters
+    float excitationPos = position;     // Option 5: Excitation position (modal synthesis)
+    float decayTime = size;
+    float pitchShift = pitch;
+    float brightness = texture;         // Option 4: Controls filter cutoff
+    float decay = 0.95f + decayTime * 0.045f;  // 0.95 to 0.995
+
+    // Option 1: DENSITY controls number of active resonators
+    int numActive = 2 + static_cast<int>(density * 10.0f);  // 2 to 12
+    numActive = juce::jlimit(2, maxResonators, numActive);
+
     float pitchRatio = pitchToRatio(pitchShift);
 
-    // TRIG input: Voice switching (Parasites behavior)
-    // Toggle voice on trigger rising edge (unless frozen)
+    // === Option 3: TRIG chord preset switching (Clouds-style) ===
     bool currentTrigger = triggerReceived.load();
     if (currentTrigger && !resonestorPreviousTrigger && !freeze)
     {
-        resonestorVoice = !resonestorVoice;  // Toggle between voice 0 and 1
+        // Switch to next chord preset
+        resonestorCurrentChord = (resonestorCurrentChord + 1) % numChordPresets;
 
-        // Start burst: duration based on first resonator's period and density
-        // Burst time = comb period × 2 × burst_duration
-        int combPeriod = static_cast<int>(resonators[0].delayLine.size());
-        resonestorBurstTime = combPeriod * 2.0f * (burstDuration + 0.1f);
+        // Update all resonator frequencies
+        const auto& newChord = chordPresets[resonestorCurrentChord];
+        for (int r = 0; r < maxResonators; ++r)
+        {
+            resonators[r].frequency = newChord[r];
+
+            // Recalculate delay line size for new frequency
+            int requestedLength = static_cast<int>(currentSampleRate / newChord[r]);
+            int delayLength = 1;
+            while (delayLength < requestedLength)
+                delayLength <<= 1;
+
+            // Only resize if necessary
+            if (static_cast<int>(resonators[r].delayLine.size()) != delayLength)
+            {
+                resonators[r].delayLine.resize(delayLength, 0.0f);
+                resonators[r].delayLineMask = delayLength - 1;
+                resonators[r].writePos = 0;
+            }
+
+            // Add subtle detuning (±2%)
+            float detune = (uniform(rng) - 0.5f) * 0.04f;
+            resonators[r].frequency *= (1.0f + detune);
+        }
+
+        // Start burst envelope
+        resonestorBurstEnvelope = 1.0f;
+        resonestorBurstDecay = 0.9995f;
     }
     resonestorPreviousTrigger = currentTrigger;
     if (currentTrigger)
@@ -2025,31 +2131,28 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             writeHead = (writeHead + 1) & bufferSizeMask;
         }
 
-        // Generate burst noise (Parasites-style)
-        float burstGain = resonestorBurstTime > 0.0f ? 1.0f : 0.0f;
-        float burstNoise = (uniform(rng) * 2.0f - 1.0f) * burstGain * excitationAmount;
+        // Burst envelope (Clouds-style smooth decay)
+        float burstGain = resonestorBurstEnvelope;
+        resonestorBurstEnvelope *= resonestorBurstDecay;
 
-        // Decrement burst time
-        if (resonestorBurstTime > 0.0f)
-            resonestorBurstTime -= 1.0f;
+        // Generate burst noise
+        float burstNoise = (uniform(rng) * 2.0f - 1.0f) * burstGain;
 
         float outputL = 0.0f;
         float outputR = 0.0f;
 
-        // Process each resonator (all active, Parasites-style)
-        // Resonators are split into two voices (6 resonators each)
-        for (int r = 0; r < maxResonators; ++r)
+        // Process active resonators
+        for (int r = 0; r < numActive; ++r)
         {
             auto& res = resonators[r];
 
-            // Determine which voice this resonator belongs to
-            int voiceIndex = r / 6;  // 0-5 = voice 0, 6-11 = voice 1
+            // === Option 5: Modal synthesis (excitation position) ===
+            // Different modes have different strength based on excitation position
+            float modeNum = static_cast<float>(r + 1);
+            float modeStrength = std::abs(std::sin(modeNum * juce::MathConstants<float>::pi * excitationPos));
 
-            // Input mix: burst noise for current voice, attenuated for other voice
-            float inputMix = (voiceIndex == resonestorVoice) ? 1.0f : 0.3f;
-
-            // Combine burst noise and direct input
-            float excitation = burstNoise * inputMix +
+            // Combine burst noise and direct input with modal weighting
+            float excitation = burstNoise * modeStrength +
                               ((r & 1) ? inSampleR : inSampleL) * 0.1f;
 
             // Write excitation to delay line
@@ -2060,23 +2163,27 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             int readPos = static_cast<int>(res.writePos + pitchOffset) & res.delayLineMask;
             float delayed = res.delayLine[readPos];
 
-            // Low-pass filter for damping (brightness control)
-            int prevPos = (readPos - 1 + res.delayLine.size()) & res.delayLineMask;
-            float filtered = delayed * damping + res.delayLine[prevPos] * (1.0f - damping);
+            // === Option 4: Two-pole lowpass filter (Butterworth-style) ===
+            // TEXTURE controls filter cutoff
+            float cutoffNorm = 0.1f + brightness * 0.85f;  // 0.1 to 0.95
+            float feedbackCoeff = 1.0f - cutoffNorm;
+
+            // Two-pole filter processing
+            float filtered = delayed * cutoffNorm - res.z1 * feedbackCoeff * 1.4f + res.z2 * feedbackCoeff * feedbackCoeff * 0.5f;
+            res.z2 = res.z1;
+            res.z1 = filtered;
 
             // Feedback with decay (comb filter)
             res.delayLine[res.writePos] = filtered * decay;
             res.writePos = (res.writePos + 1) & res.delayLineMask;
 
-            // Accumulate to output (alternate L/R)
-            if (!(r & 1))
-                outputL += filtered;
-            else
-                outputR += filtered;
+            // === Option 2: Stereo spread with individual panning ===
+            outputL += filtered * res.panL;
+            outputR += filtered * res.panR;
         }
 
-        // Output gain (normalized for 12 resonators)
-        float gain = 0.15f / sqrtf(maxResonators);
+        // Normalize by number of active resonators
+        float gain = 0.15f / std::sqrt(static_cast<float>(numActive));
 
         wetL[i] = outputL * gain;
         wetR[i] = outputR * gain;

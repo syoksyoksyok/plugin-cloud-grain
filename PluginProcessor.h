@@ -407,7 +407,7 @@ private:
     SimpleAllpass oliverbDiffuserL1, oliverbDiffuserL2, oliverbDiffuserL3, oliverbDiffuserL4;
     SimpleAllpass oliverbDiffuserR1, oliverbDiffuserR2, oliverbDiffuserR3, oliverbDiffuserR4;
 
-    // Resonestor mode state (Karplus-Strong resonators)
+    // Resonestor mode state (Karplus-Strong resonators - Clouds/SuperParasites-style)
     static constexpr int maxResonators = 12;
     struct Resonator
     {
@@ -417,12 +417,27 @@ private:
         float feedback = 0.0f;
         float brightness = 0.5f;
         bool active = false;
+
+        // Option 2: Stereo spread (panning)
+        float panL = 0.0f;
+        float panR = 0.0f;
+
+        // Option 4: Two-pole lowpass filter state
+        float z1 = 0.0f;
+        float z2 = 0.0f;
+
+        // Option 5: Modal synthesis (base frequency)
+        float frequency = 0.0f;
     };
     std::array<Resonator, maxResonators> resonators;
 
-    // Resonestor: Voice switching and burst noise (Parasites-style)
-    int resonestorVoice = 0;  // Current voice (0 or 1)
-    float resonestorBurstTime = 0.0f;  // Burst duration counter
+    // Option 3: Chord presets for TRIG switching
+    static constexpr int numChordPresets = 6;
+    int resonestorCurrentChord = 0;
+
+    // Resonestor: Burst envelope (Clouds-style smooth envelope)
+    float resonestorBurstEnvelope = 0.0f;
+    float resonestorBurstDecay = 0.9995f;
     bool resonestorPreviousTrigger = false;  // For trigger edge detection
 
     // Beat Repeat mode state
