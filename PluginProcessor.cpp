@@ -30,8 +30,8 @@ CloudLikeGranularProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Mode selection: 0 = Granular, 1 = Pitch Shifter, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat
-    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 6, 0));
+    // Mode selection: 0 = Granular, 1 = Pitch Shifter, 2 = Looping, 3 = Spectral, 4 = Oliverb, 5 = Resonestor, 6 = Beat Repeat, 7 = Spectral Clouds
+    params.push_back (std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 7, 0));
 
     params.push_back (std::make_unique<juce::AudioParameterFloat>("position", "Position", 0.0f, 1.0f, 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat>("size",     "Size",     0.016f, 1.0f, 0.1f));  // 16ms to 1s (Clouds range)
