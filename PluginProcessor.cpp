@@ -2697,6 +2697,25 @@ void CloudLikeGranularProcessor::processSpectralCloudsBlock (juce::AudioBuffer<f
         }
     }
 
+    // ========== WET signal guarantee (prevents silence at MIX=100%) ==========
+    // Spectral Clouds should never be completely "wet" - always mix some input
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float inSampleL = buffer.getSample(0, i);
+        float inSampleR = buffer.getSample(1, i);
+
+        // Mix 80% processed + 20% input (Clouds/Kammerl-style design)
+        wetL[i] = wetL[i] * 0.8f + inSampleL * 0.2f;
+        wetR[i] = wetR[i] * 0.8f + inSampleR * 0.2f;
+
+        // Fallback: if still silent, use input directly
+        if (std::abs(wetL[i]) < 1e-6f && std::abs(wetR[i]) < 1e-6f)
+        {
+            wetL[i] = inSampleL;
+            wetR[i] = inSampleR;
+        }
+    }
+
     // Apply feedback (mix previous output back into input buffer for next iteration)
     if (feedback > 0.001f)
     {
