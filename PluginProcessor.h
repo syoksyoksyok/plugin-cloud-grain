@@ -287,8 +287,24 @@ private:
     std::atomic<int> detectedPeriod { 0 };
     std::atomic<int> correlatorUpdateCounter { 0 };
 
-    // Pitch Shifter state (WSOLA-based)
-    double pitchShifterReadPos = 0.0;
+    // Pitch Shifter state (WSOLA-based with dual windows and correlator)
+    struct WSOLAWindow {
+        double readPos = 0.0;           // Current read position
+        int hopCounter = 0;             // Samples until next window
+        int windowSize = 2048;          // Current window size
+        bool active = false;            // Window is playing
+        bool needsRegeneration = false; // Needs new position calculation
+    };
+    WSOLAWindow wsolaWindows[2];        // Two overlapping windows
+    int wsolaCurrentWindow = 0;         // Currently active window index
+
+    // WSOLA envelope for smooth trigger response (Clouds-style)
+    float wsolaEnvPhase = 1.0f;         // Envelope phase (0.0 = start, 1.0 = fully open)
+    float wsolaEnvIncrement = 0.0f;     // Envelope increment per sample
+    int wsolaElapsed = 0;               // Samples since last trigger
+
+    // WSOLA parameters
+    double pitchShifterReadPos = 0.0;   // Legacy read position (for compatibility)
     int pitchShifterWindowSize = 2048;
     int pitchShifterSearchWindow = 512;
 

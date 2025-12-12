@@ -156,6 +156,20 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     spectralOutputL.fill(0.0f);
     spectralOutputR.fill(0.0f);
 
+    // Initialize WSOLA state for Pitch Shifter mode
+    for (int w = 0; w < 2; ++w)
+    {
+        wsolaWindows[w].readPos = 0.0;
+        wsolaWindows[w].hopCounter = 0;
+        wsolaWindows[w].windowSize = 2048;
+        wsolaWindows[w].active = false;
+        wsolaWindows[w].needsRegeneration = true;  // Start with regeneration needed
+    }
+    wsolaCurrentWindow = 0;
+    wsolaEnvPhase = 1.0f;       // Start fully open
+    wsolaEnvIncrement = 0.0f;
+    wsolaElapsed = 0;
+
     // Initialize Oliverb taps (multi-tap delay with modulation)
     const std::array<float, 8> tapTimes = { 0.037f, 0.089f, 0.127f, 0.191f, 0.277f, 0.359f, 0.441f, 0.593f };
     for (size_t i = 0; i < oliverbTaps.size(); ++i)
@@ -964,35 +978,59 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== PITCH SHIFTER MODE (Clouds-style WSOLA) ==========
+    // ========== PITCH SHIFTER MODE (Clouds-style WSOLA with improvements) ==========
+    // Improvements:
+    // 1. Envelope-based smooth trigger response (Clouds-style)
+    // 2. Dual-window overlap-add system for continuous output
+    // 3. Simplified correlator for phase-aligned windows
+    //
     // SIZE: Controls window size - large = smooth, small = grainy/ring-modulated
     // PITCH: Controls pitch shift amount (-24 to +24 semitones)
     // POSITION: Controls read delay position
 
-    // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
+    // OPTIMIZATION: Calculate parameters once per block
     float pitchRatio = pitchToRatio(pitch);
 
     // Clouds-style SIZE mapping: 0.0 = small (256), 1.0 = large (2048)
-    // Small window = grainy, ring-modulated; Large window = smooth
-    int windowSize = static_cast<int>(256.0f + size * 1792.0f);  // 256 to 2048
+    int windowSize = static_cast<int>(256.0f + size * 1792.0f);
     windowSize = (windowSize + 3) & ~3;  // Round to multiple of 4 for alignment
 
-    int hopOut = windowSize >> 1;  // OPTIMIZED: Output hop = half window size
+    int hopSize = windowSize >> 1;  // Output hop = half window size
 
-    // Time stretching: combine pitch shift with independent time scaling
-    // pitchRatio > 1.0 = higher pitch, < 1.0 = lower pitch
-    float timeStretch = 1.0f / pitchRatio;  // Inverse for time-domain playback
-    int hopIn = static_cast<int>(hopOut * timeStretch);
+    // Update window size for both windows
+    wsolaWindows[0].windowSize = windowSize;
+    wsolaWindows[1].windowSize = windowSize;
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Force new WSOLA segment capture (Clouds TRIG behavior)
+        // === Option 1: Envelope-based smooth trigger response ===
+        // TRIG input: Smoothly ramp to new position (Clouds-style envelope)
         if (i == 0 && triggerReceived.load())
         {
-            // Reset read position to capture fresh segment from current buffer position
-            pitchShifterReadPos = 0.0;
             triggerReceived.store(false);
+
+            // Calculate elapsed samples since last trigger for smooth envelope
+            int elapsed = juce::jmax(1, wsolaElapsed);
+
+            // Start envelope ramp (0.0 = fully reset, 1.0 = fully open)
+            wsolaEnvPhase = 0.0f;
+            wsolaEnvIncrement = 1.0f / static_cast<float>(elapsed);
+
+            // Mark windows for regeneration at new position
+            wsolaWindows[0].needsRegeneration = true;
+            wsolaWindows[1].needsRegeneration = true;
+
+            wsolaElapsed = 0;
         }
+
+        // Update envelope phase
+        if (wsolaEnvPhase < 1.0f)
+        {
+            wsolaEnvPhase += wsolaEnvIncrement;
+            if (wsolaEnvPhase > 1.0f) wsolaEnvPhase = 1.0f;
+        }
+
+        wsolaElapsed++;
 
         float inSampleL = inL[i];
         float inSampleR = inR ? inR[i] : inSampleL;
@@ -1001,42 +1039,119 @@ void CloudLikeGranularProcessor::processPitchShifterBlock (juce::AudioBuffer<flo
         {
             ringBuffer.setSample (0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample (1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            writeHead = (writeHead + 1) & bufferSizeMask;
         }
 
-        // Clouds-style read position with delay
-        double delayAmount = position * (bufferSize - windowSize);
-        double readPos = pitchShifterReadPos;
-        double delayedReadPos = static_cast<double>(writeHead) - delayAmount - readPos;
+        // === Option 2: Dual-window overlap-add system ===
+        // Process two overlapping windows for continuous smooth output
+        float outputL = 0.0f;
+        float outputR = 0.0f;
+        int activeWindows = 0;
 
-        // Wrap read position
-        while (delayedReadPos < 0) delayedReadPos += bufferSize;
-        while (delayedReadPos >= bufferSize) delayedReadPos -= bufferSize;
-
-        float outL = getSampleFromRing(0, delayedReadPos);
-        float outR = getSampleFromRing(1, delayedReadPos);
-
-        // Clouds-style Hann window with pitch-dependent shaping (OPTIMIZED: LUT)
-        // Smoother envelope for large windows, more aggressive for small windows
-        float windowPhase = std::fmod(pitchShifterReadPos, static_cast<double>(hopOut)) / hopOut;
-        float window = 0.5f * (1.0f - fastCos(windowPhase * juce::MathConstants<float>::twoPi));
-
-        // Additional envelope shaping for small windows (ring-mod effect)
-        if (size < 0.3f)
+        for (int w = 0; w < 2; ++w)
         {
-            float ringModAmount = (0.3f - size) * 3.333f;  // 0 to 1
-            window = window * (1.0f - ringModAmount * 0.5f);  // Reduce amplitude
+            auto& window = wsolaWindows[w];
+
+            // Check if window needs regeneration (hop complete or trigger received)
+            if (window.hopCounter >= hopSize || window.needsRegeneration)
+            {
+                window.hopCounter = 0;
+                window.needsRegeneration = false;
+
+                // === Option 3: Simplified correlator for phase alignment ===
+                // Find best read position using zero-crossing detection
+                // This reduces artifacts at window boundaries
+
+                // Effective position with envelope-based interpolation during trigger ramp
+                float effectivePosition = position;
+                if (wsolaEnvPhase < 1.0f)
+                {
+                    // Interpolate between current position and extreme during ramp
+                    effectivePosition += (1.0f - wsolaEnvPhase) * (1.0f - position);
+                }
+
+                // Calculate base read position
+                double delayAmount = effectivePosition * (bufferSize - windowSize * 2);
+                double baseReadPos = static_cast<double>(writeHead) - delayAmount;
+
+                // Wrap to valid buffer range
+                while (baseReadPos < 0) baseReadPos += bufferSize;
+                while (baseReadPos >= bufferSize) baseReadPos -= bufferSize;
+
+                // Simple correlator: find zero-crossing within search range
+                // Search ±32 samples for better phase alignment
+                const int searchRange = 32;
+                double bestReadPos = baseReadPos;
+                float minAbsValue = 1000.0f;
+
+                for (int offset = -searchRange; offset <= searchRange; offset += 4)
+                {
+                    double testPos = baseReadPos + offset;
+                    while (testPos < 0) testPos += bufferSize;
+                    while (testPos >= bufferSize) testPos -= bufferSize;
+
+                    // Check for zero-crossing (phase alignment indicator)
+                    float sample0 = getSampleFromRing(0, testPos);
+                    float sample1 = getSampleFromRing(0, testPos + 1);
+
+                    // Find position closest to zero crossing
+                    if (sample0 * sample1 <= 0.0f && std::abs(sample0) < minAbsValue)
+                    {
+                        minAbsValue = std::abs(sample0);
+                        bestReadPos = testPos;
+                    }
+                }
+
+                window.readPos = bestReadPos;
+                window.active = true;
+            }
+
+            if (window.active)
+            {
+                // Calculate window position within hop
+                double windowPhase = static_cast<double>(window.hopCounter) / hopSize;
+
+                // Hann window for smooth overlap-add
+                float envelope = 0.5f * (1.0f - std::cos(windowPhase * juce::MathConstants<float>::twoPi));
+
+                // Additional envelope shaping for small windows (ring-mod effect)
+                if (size < 0.3f)
+                {
+                    float ringModAmount = (0.3f - size) * 3.333f;
+                    envelope *= (1.0f - ringModAmount * 0.5f);
+                }
+
+                // Read samples from ring buffer
+                double sampleReadPos = window.readPos + window.hopCounter * pitchRatio;
+
+                // Wrap read position
+                while (sampleReadPos < 0) sampleReadPos += bufferSize;
+                while (sampleReadPos >= bufferSize) sampleReadPos -= bufferSize;
+
+                float sampleL = getSampleFromRing(0, sampleReadPos);
+                float sampleR = getSampleFromRing(1, sampleReadPos);
+
+                // Accumulate windowed output
+                outputL += sampleL * envelope;
+                outputR += sampleR * envelope;
+
+                window.hopCounter++;
+                activeWindows++;
+
+                // Deactivate window when hop is complete
+                if (window.hopCounter >= hopSize)
+                {
+                    window.active = false;
+                }
+            }
         }
 
-        wetL[i] = outL * window;
-        wetR[i] = outR * window;
+        // Normalize by active window count and apply envelope
+        float normalization = activeWindows > 0 ? (1.0f / activeWindows) : 1.0f;
+        float envelopeGain = 0.3f + wsolaEnvPhase * 0.7f;  // Fade in during trigger ramp
 
-        // Advance read position
-        pitchShifterReadPos += 1.0;
-        if (pitchShifterReadPos >= hopOut)
-        {
-            pitchShifterReadPos -= hopOut;
-        }
+        wetL[i] = outputL * normalization * envelopeGain;
+        wetR[i] = outputR * normalization * envelopeGain;
     }
 }
 
