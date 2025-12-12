@@ -1432,7 +1432,7 @@ void CloudLikeGranularProcessor::processLoopingBlock (juce::AudioBuffer<float>& 
         // === Option 3: TEXTURE feedback filtering (Clouds-style) ===
         // TEXTURE < 0.5: Low-pass filter (dark feedback)
         // TEXTURE > 0.5: High-pass filter (bright feedback)
-        float filterCoeff = 0.1f + texture * 0.8f;  // 0.1 to 0.9
+        // float filterCoeff = 0.1f + texture * 0.8f;  // 0.1 to 0.9 (reserved for future use)
 
         float feedbackL = wetL[i] * feedback;
         float feedbackR = wetR[i] * feedback;
