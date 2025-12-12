@@ -236,7 +236,7 @@ private:
     std::unique_ptr<ButtonAttachment> trigModeAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
-    void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel);
+    void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox = true);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularEditor)
 };

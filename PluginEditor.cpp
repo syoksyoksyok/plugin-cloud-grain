@@ -45,9 +45,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateLookAndFeel->knobColors = &uiColors.trigRate;
 
     // Setup knobs with their individual LookAndFeel instances
-    setupKnob (modeKnob, "Mode", modeLookAndFeel.get());
-    modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    modeKnob.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);  // No text box - use custom label
+    setupKnob (modeKnob, "Mode", modeLookAndFeel.get(), false);  // No text box - use custom label
 
     setupKnob (positionKnob, "Position", positionLookAndFeel.get());
     setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
@@ -58,8 +56,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     setupKnob (feedbackKnob, "Feedback", feedbackLookAndFeel.get());
     setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get());
     setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get());
-    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get());
-    trigRateKnob.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);  // No text box - use custom label
+    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get(), false);  // No text box - use custom label
 
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
@@ -346,14 +343,17 @@ void CloudLikeGranularEditor::timerCallback()
     }
 }
 
-void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel)
+void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox)
 {
     addAndMakeVisible (k.slider);
     addAndMakeVisible (k.label);
 
     k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
-    k.slider.setPopupDisplayEnabled (true, false, this);
+    if (showTextBox)
+        k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
+    else
+        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    k.slider.setPopupDisplayEnabled (false, false, this);
 
     // Use JUCE default rotary parameters (no explicit setRotaryParameters call)
     // This should give standard knob behavior: left-bottom = min, right-bottom = max
