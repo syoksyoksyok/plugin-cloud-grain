@@ -179,6 +179,7 @@ public:
     void resized() override;
     void timerCallback() override;
     void mouseDown (const juce::MouseEvent& event) override;
+    void mouseMove (const juce::MouseEvent& event) override;
 
 private:
     CloudLikeGranularProcessor& processor;

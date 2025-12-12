@@ -139,6 +139,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     tapBpmLabel.setJustificationType (juce::Justification::centred);
     tapBpmLabel.setText ("---", juce::dontSendNotification);
+    tapBpmLabel.setInterceptsMouseClicks (false, true);  // Allow parent to receive mouse events
 
     auto& apvts = processor.apvts;
 
@@ -562,15 +563,40 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
 
     // Draw circular background for tap BPM label (knob-style display)
     auto bpmBounds = tapBpmLabel.getBounds().toFloat();
-    g.setColour (juce::Colour::fromRGB (240, 240, 240));  // Light gray background
+
+    // Check if Manual mode (clickable)
+    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    bool isManualMode = !trigMode;
+
+    // Background color: lighter in Manual mode to indicate it's clickable
+    if (isManualMode)
+    {
+        g.setColour (juce::Colour::fromRGB (250, 250, 250));  // Almost white (clickable)
+    }
+    else
+    {
+        g.setColour (juce::Colour::fromRGB (230, 230, 230));  // Darker gray (disabled)
+    }
     g.fillEllipse (bpmBounds);
+
+    // Border: thicker in Manual mode
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (bpmBounds, 2.0f);  // Border
+    float borderThickness = isManualMode ? 2.5f : 1.5f;
+    g.drawEllipse (bpmBounds, borderThickness);
 
     // Draw "BPM" text below the circle
     auto bpmLabelArea = bpmBounds.withY (bpmBounds.getBottom() + 2).withHeight (15);
     g.setFont (juce::Font ("Courier New", 10.0f, juce::Font::plain));
+    g.setColour (uiColors.knobLabel);
     g.drawText ("BPM", bpmLabelArea, juce::Justification::centred);
+
+    // Add "TAP" hint in Manual mode
+    if (isManualMode)
+    {
+        auto tapHintArea = bpmLabelArea.withY (bpmLabelArea.getBottom());
+        g.setFont (juce::Font ("Courier New", 8.0f, juce::Font::plain));
+        g.drawText ("(TAP)", tapHintArea, juce::Justification::centred);
+    }
 }
 
 void CloudLikeGranularEditor::resized()
@@ -667,7 +693,12 @@ void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
 {
     // Check if BPM circle was clicked (only in Manual mode)
     bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
-    if (!trigMode && tapBpmLabel.getBounds().contains (event.getPosition()))
+
+    // Get BPM label bounds and check if click is inside
+    auto bpmBounds = tapBpmLabel.getBounds();
+    auto clickPos = event.getPosition();
+
+    if (!trigMode && bpmBounds.contains (clickPos))
     {
         // Trigger event
         processor.triggerReceived.store (true);
@@ -690,5 +721,25 @@ void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
         }
 
         processor.lastTapTime.store (currentTime);
+
+        // Force repaint to show visual feedback
+        repaint();
+    }
+}
+
+void CloudLikeGranularEditor::mouseMove (const juce::MouseEvent& event)
+{
+    // Change cursor to pointing hand when over BPM circle in Manual mode
+    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    auto bpmBounds = tapBpmLabel.getBounds();
+    auto mousePos = event.getPosition();
+
+    if (!trigMode && bpmBounds.contains (mousePos))
+    {
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+    else
+    {
+        setMouseCursor (juce::MouseCursor::NormalCursor);
     }
 }
