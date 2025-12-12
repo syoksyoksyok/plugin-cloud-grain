@@ -440,15 +440,37 @@ private:
     float resonestorBurstDecay = 0.9995f;
     bool resonestorPreviousTrigger = false;  // For trigger edge detection
 
-    // Beat Repeat mode state
+    // Beat Repeat mode state (Clouds/SuperParasites-style improvements)
     struct BeatRepeatState
     {
         std::vector<float> captureBufferL;
         std::vector<float> captureBufferR;
         int captureLength = 0;
-        int repeatPos = 0;
+        float repeatPos = 0.0f;  // Changed to float for sub-sample accuracy
         float stutterPhase = 0.0f;
         bool isCapturing = false;
+
+        // Option 1: DENSITY quantized divisions
+        static constexpr int numDivisions = 8;
+        std::array<float, numDivisions> divisions = {32.0f, 16.0f, 8.0f, 4.0f, 2.0f, 1.0f, 0.5f, 0.25f};
+
+        // Option 3: POSITION slice subdivision
+        int numSlices = 1;
+        int currentSlice = 0;
+        std::array<int, 16> sliceOrder = {};  // Randomized slice playback order
+
+        // Option 4: TRIG capture modes (0=Repeat, 1=Gate, 2=Reverse)
+        int triggerMode = 0;
+        bool triggerHeld = false;
+        float triggerHoldTime = 0.0f;
+
+        // Option 5: Envelope shaping
+        float envelopePhase = 0.0f;
+        float attackTime = 0.005f;   // 5ms attack
+        float releaseTime = 0.01f;   // 10ms release
+        std::vector<float> crossfadeBufferL;
+        std::vector<float> crossfadeBufferR;
+        bool hasPreviousCapture = false;
     };
     BeatRepeatState beatRepeat;
 

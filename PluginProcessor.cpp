@@ -1,6 +1,9 @@
 // PluginProcessor.cpp
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
+#include <random>
+#include <numeric>
 
 // Include SSE intrinsics for fast inverse square root
 #if defined(__SSE__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
@@ -341,9 +344,24 @@ void CloudLikeGranularProcessor::prepareToPlay (double sampleRate, int samplesPe
     beatRepeat.captureBufferL.resize(beatRepeatSize, 0.0f);
     beatRepeat.captureBufferR.resize(beatRepeatSize, 0.0f);
     beatRepeat.captureLength = beatRepeatSize >> 2;  // OPTIMIZED: Bit shift for division by 4
-    beatRepeat.repeatPos = 0;
+    beatRepeat.repeatPos = 0.0f;
     beatRepeat.stutterPhase = 0.0f;
     beatRepeat.isCapturing = false;
+
+    // Initialize Clouds/SuperParasites-style improvements
+    beatRepeat.numSlices = 1;
+    beatRepeat.currentSlice = 0;
+    for (int i = 0; i < 16; ++i)
+        beatRepeat.sliceOrder[i] = i;  // Sequential order by default
+
+    beatRepeat.triggerMode = 0;  // Mode 0: Repeat (default)
+    beatRepeat.triggerHeld = false;
+    beatRepeat.triggerHoldTime = 0.0f;
+
+    beatRepeat.envelopePhase = 0.0f;
+    beatRepeat.crossfadeBufferL.resize(beatRepeatSize, 0.0f);
+    beatRepeat.crossfadeBufferR.resize(beatRepeatSize, 0.0f);
+    beatRepeat.hasPreviousCapture = false;
 }
 
 float CloudLikeGranularProcessor::getSampleFromRing (int channel, double index) const
@@ -2197,30 +2215,66 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
     auto* inL = buffer.getReadPointer (0);
     auto* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr;
 
-    // ========== BEAT REPEAT MODE (Block Processing) ==========
-    // OPTIMIZATION: Calculate parameters once per block (OPTIMIZED: Bit shift)
-    float capturePos = position;
-    float repeatLength = size * 0.5f * currentSampleRate;
-    // Beat Repeat: Kammerl original specification
-    // "To the very left, the knob defines a zero pitch, to the very right, the original playback speed"
-    // pitch range: -24 to +24 → speed range: 0.0 to 2.0
-    // Like a tape or record running at different speeds (no time-correction)
-    float playbackSpeed = (pitch + 24.0f) / 24.0f;  // Left (-24)→0.0x (stopped), Center (0)→1.0x, Right (+24)→2.0x
-    float repeatRate = 1.0f + density * 15.0f;
-    float stutterAmount = texture;
+    // ========== BEAT REPEAT MODE (Clouds/SuperParasites-style) ==========
 
-    // Update capture length based on size
+    // === Option 1: DENSITY quantized divisions ===
+    // Map DENSITY to 8 musical divisions (1/32 to 4/1)
+    int divisionIndex = juce::jlimit(0, beatRepeat.numDivisions - 1,
+                                     static_cast<int>(density * beatRepeat.numDivisions));
+    float division = beatRepeat.divisions[divisionIndex];
+
+    // Calculate repeat rate in Hz (assuming 120 BPM base tempo)
+    float baseTempo = 120.0f;
+    float repeatRate = (baseTempo / 60.0f) * division;  // Hz
+
+    // === Option 3: POSITION slice subdivision ===
+    // POSITION controls number of slices (1-16)
+    beatRepeat.numSlices = 1 + static_cast<int>(position * 15.0f);
+    beatRepeat.numSlices = juce::jlimit(1, 16, beatRepeat.numSlices);
+
+    // SIZE controls repeat length
+    float repeatLength = size * 0.5f * currentSampleRate;
     beatRepeat.captureLength = juce::jlimit(512, static_cast<int>(beatRepeat.captureBufferL.size()),
                                             static_cast<int>(repeatLength));
 
+    // PITCH controls playback speed (original behavior)
+    float playbackSpeed = (pitch + 24.0f) / 24.0f;  // -24→0.0x, 0→1.0x, +24→2.0x
+
+    // RNG for slice randomization
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::uniform_real_distribution<float> uniform(0.0f, 1.0f);
+
     for (int i = 0; i < numSamples; ++i)
     {
-        // TRIG input: Capture new beat repeat segment (Kammerl behavior)
-        bool triggerCapture = false;
-        if (i == 0 && triggerReceived.load())
-        {
-            triggerCapture = true;
+        // === Option 4: TRIG capture modes ===
+        bool currentTrigger = (i == 0 && triggerReceived.load());
+        if (currentTrigger)
             triggerReceived.store(false);
+
+        // Track trigger hold time for mode switching
+        if (currentTrigger && !beatRepeat.triggerHeld)
+        {
+            beatRepeat.triggerHeld = true;
+            beatRepeat.triggerHoldTime = 0.0f;
+        }
+
+        if (beatRepeat.triggerHeld)
+        {
+            beatRepeat.triggerHoldTime += 1.0f / currentSampleRate;
+
+            // Long press (>0.5s) switches mode
+            if (beatRepeat.triggerHoldTime > 0.5f)
+            {
+                beatRepeat.triggerMode = (beatRepeat.triggerMode + 1) % 3;
+                beatRepeat.triggerHeld = false;
+                beatRepeat.triggerHoldTime = 0.0f;
+            }
+        }
+
+        if (!currentTrigger && beatRepeat.triggerHeld)
+        {
+            beatRepeat.triggerHeld = false;
         }
 
         float inSampleL = inL[i];
@@ -2230,71 +2284,190 @@ void CloudLikeGranularProcessor::processBeatRepeatBlock (juce::AudioBuffer<float
         {
             ringBuffer.setSample(0, writeHead, inSampleL + wetL[i] * feedback);
             ringBuffer.setSample(1, writeHead, inSampleR + wetR[i] * feedback);
-            writeHead = (writeHead + 1) & bufferSizeMask;  // OPTIMIZED: Bit mask
+            writeHead = (writeHead + 1) & bufferSizeMask;
         }
 
-        // Trigger capture based on repeat rate (or manual TRIG)
+        // Automatic capture based on repeat rate
         beatRepeat.stutterPhase += repeatRate / currentSampleRate;
-        if (beatRepeat.stutterPhase >= 1.0f || triggerCapture)
+        bool shouldCapture = (beatRepeat.stutterPhase >= 1.0f) || currentTrigger;
+
+        if (shouldCapture)
         {
-            if (!triggerCapture)
+            if (beatRepeat.stutterPhase >= 1.0f)
                 beatRepeat.stutterPhase -= 1.0f;
             else
-                beatRepeat.stutterPhase = 0.0f;  // Reset phase on manual trigger
+                beatRepeat.stutterPhase = 0.0f;
 
-            beatRepeat.isCapturing = true;
-            beatRepeat.repeatPos = 0;
+            // === Option 5: Crossfade - Save previous capture ===
+            if (beatRepeat.hasPreviousCapture)
+            {
+                std::copy(beatRepeat.captureBufferL.begin(),
+                         beatRepeat.captureBufferL.begin() + beatRepeat.captureLength,
+                         beatRepeat.crossfadeBufferL.begin());
+                std::copy(beatRepeat.captureBufferR.begin(),
+                         beatRepeat.captureBufferR.begin() + beatRepeat.captureLength,
+                         beatRepeat.crossfadeBufferR.begin());
+            }
 
-            // Capture from ring buffer at position
-            int captureStart = writeHead - static_cast<int>(capturePos * bufferSize);
+            // Capture from ring buffer
+            int captureStart = writeHead - beatRepeat.captureLength;
             if (captureStart < 0) captureStart += bufferSize;
 
             for (int n = 0; n < beatRepeat.captureLength; ++n)
             {
-                int readIdx = (captureStart + n) & bufferSizeMask;  // OPTIMIZED: Bit mask
+                int readIdx = (captureStart + n) & bufferSizeMask;
                 beatRepeat.captureBufferL[n] = ringBuffer.getSample(0, readIdx);
                 beatRepeat.captureBufferR[n] = ringBuffer.getSample(1, readIdx);
             }
+
+            // === Mode 2: Reverse capture ===
+            if (beatRepeat.triggerMode == 2)
+            {
+                std::reverse(beatRepeat.captureBufferL.begin(),
+                            beatRepeat.captureBufferL.begin() + beatRepeat.captureLength);
+                std::reverse(beatRepeat.captureBufferR.begin(),
+                            beatRepeat.captureBufferR.begin() + beatRepeat.captureLength);
+            }
+
+            beatRepeat.isCapturing = true;
+            beatRepeat.repeatPos = 0.0f;
+            beatRepeat.envelopePhase = 0.0f;
+            beatRepeat.currentSlice = 0;
+            beatRepeat.hasPreviousCapture = true;
+
+            // Randomize slice order if numSlices > 1
+            if (beatRepeat.numSlices > 1 && uniform(rng) > 0.5f)
+            {
+                for (int s = 0; s < beatRepeat.numSlices; ++s)
+                    beatRepeat.sliceOrder[s] = s;
+                std::shuffle(beatRepeat.sliceOrder.begin(),
+                           beatRepeat.sliceOrder.begin() + beatRepeat.numSlices, rng);
+            }
         }
 
-        // Playback captured buffer
-        if (beatRepeat.isCapturing && beatRepeat.captureLength > 0)
+        // === Mode 1: Gate mode (only play while trigger held) ===
+        bool shouldPlay = beatRepeat.isCapturing;
+        if (beatRepeat.triggerMode == 1)
+            shouldPlay = shouldPlay && beatRepeat.triggerHeld;
+
+        if (shouldPlay && beatRepeat.captureLength > 0)
         {
-            // Wrap repeatPos to valid range (handles both positive and negative speeds)
-            // Use fmod for safe wrapping to avoid infinite loops
-            beatRepeat.repeatPos = std::fmod(beatRepeat.repeatPos, static_cast<float>(beatRepeat.captureLength));
-            if (beatRepeat.repeatPos < 0.0f)
-                beatRepeat.repeatPos += beatRepeat.captureLength;
+            // === Option 3: Slice playback ===
+            int sliceLength = beatRepeat.captureLength / beatRepeat.numSlices;
+            int currentSliceIdx = beatRepeat.sliceOrder[beatRepeat.currentSlice];
+            int sliceStart = currentSliceIdx * sliceLength;
+            int sliceEnd = sliceStart + sliceLength;
 
-            // Use linear interpolation for smooth playback at any speed
-            float readPosFloat = beatRepeat.repeatPos;
-            int readPos0 = static_cast<int>(readPosFloat);
-            int readPos1 = (readPos0 + 1) % beatRepeat.captureLength;
-            float frac = readPosFloat - readPos0;
+            // Wrap position within current slice
+            float slicePos = std::fmod(beatRepeat.repeatPos, static_cast<float>(sliceLength));
+            if (slicePos < 0.0f) slicePos += sliceLength;
 
-            // Interpolate between samples for smooth playback
+            float globalPos = sliceStart + slicePos;
+
+            // Interpolation
+            int readPos0 = static_cast<int>(globalPos);
+            int readPos1 = readPos0 + 1;
+            if (readPos1 >= beatRepeat.captureLength) readPos1 = beatRepeat.captureLength - 1;
+            float frac = globalPos - readPos0;
+
             float outL = beatRepeat.captureBufferL[readPos0] +
                         (beatRepeat.captureBufferL[readPos1] - beatRepeat.captureBufferL[readPos0]) * frac;
             float outR = beatRepeat.captureBufferR[readPos0] +
                         (beatRepeat.captureBufferR[readPos1] - beatRepeat.captureBufferR[readPos0]) * frac;
 
-            // Apply stutter envelope
-            float stutterEnv = 1.0f;
-            if (stutterAmount > 0.5f)
+            // === Option 2: TEXTURE stutter patterns ===
+            float effectAmount = 1.0f;
+            float normalizedPos = beatRepeat.repeatPos / sliceLength;
+
+            if (texture < 0.2f)
             {
-                float stutterFreq = (stutterAmount - 0.5f) * 40.0f + 2.0f;
-                float normalizedPos = beatRepeat.repeatPos / beatRepeat.captureLength;
-                // Ensure normalized position is positive for stutter phase calculation
-                while (normalizedPos < 0.0f) normalizedPos += 1.0f;
-                float stutterPhaseLocal = std::fmod(normalizedPos * stutterFreq, 1.0f);
-                stutterEnv = stutterPhaseLocal < 0.5f ? 1.0f : 0.3f;
+                // Gate/Stutter (short bursts)
+                float gateFreq = 10.0f + texture * 40.0f;
+                float gatePhase = std::fmod(normalizedPos * gateFreq, 1.0f);
+                effectAmount = gatePhase < 0.3f ? 1.0f : 0.2f;
+            }
+            else if (texture < 0.4f)
+            {
+                // Reverse slice (second half plays backwards)
+                if (normalizedPos > 0.5f)
+                {
+                    float reversePos = sliceStart + (1.0f - normalizedPos) * sliceLength;
+                    int rPos = static_cast<int>(reversePos);
+                    rPos = juce::jlimit(0, beatRepeat.captureLength - 1, rPos);
+                    outL = beatRepeat.captureBufferL[rPos];
+                    outR = beatRepeat.captureBufferR[rPos];
+                }
+            }
+            else if (texture < 0.6f)
+            {
+                // Pitch bend (simulate pitch change)
+                float bendAmount = (texture - 0.4f) * 10.0f;
+                float bendedPos = globalPos + std::sin(normalizedPos * juce::MathConstants<float>::pi) * bendAmount;
+                int bPos = static_cast<int>(bendedPos);
+                bPos = juce::jlimit(0, beatRepeat.captureLength - 1, bPos);
+                outL = beatRepeat.captureBufferL[bPos];
+                outR = beatRepeat.captureBufferR[bPos];
+            }
+            else if (texture < 0.8f)
+            {
+                // Filter sweep (lowpass → highpass simulation via amplitude modulation)
+                float sweepPos = (texture - 0.6f) * 5.0f;
+                float filterMod = 0.5f + 0.5f * std::sin(normalizedPos * juce::MathConstants<float>::pi + sweepPos);
+                effectAmount = 0.3f + filterMod * 0.7f;
+            }
+            else
+            {
+                // Granular (tiny grains)
+                float grainFreq = 20.0f + (texture - 0.8f) * 80.0f;
+                float grainPhase = std::fmod(normalizedPos * grainFreq, 1.0f);
+                float grainEnv = std::sin(grainPhase * juce::MathConstants<float>::pi);
+                effectAmount = grainEnv;
             }
 
-            wetL[i] = outL * stutterEnv;
-            wetR[i] = outR * stutterEnv;
+            // === Option 5: Envelope shaping ===
+            float envelope = 1.0f;
+            float attackSamples = beatRepeat.attackTime * currentSampleRate;
+            float releaseSamples = beatRepeat.releaseTime * currentSampleRate;
 
-            // Advance playback position (supports negative speed for reverse)
+            if (beatRepeat.envelopePhase < attackSamples)
+            {
+                envelope = beatRepeat.envelopePhase / attackSamples;
+            }
+            else if (beatRepeat.repeatPos > sliceLength - releaseSamples)
+            {
+                float releasePhase = (sliceLength - beatRepeat.repeatPos) / releaseSamples;
+                envelope = juce::jlimit(0.0f, 1.0f, releasePhase);
+            }
+
+            // Crossfade with previous capture
+            float crossfade = 0.0f;
+            if (beatRepeat.hasPreviousCapture && beatRepeat.envelopePhase < attackSamples * 2.0f)
+            {
+                crossfade = 1.0f - (beatRepeat.envelopePhase / (attackSamples * 2.0f));
+                crossfade = juce::jlimit(0.0f, 1.0f, crossfade);
+
+                int prevPos = static_cast<int>(globalPos);
+                prevPos = juce::jlimit(0, beatRepeat.captureLength - 1, prevPos);
+                float prevL = beatRepeat.crossfadeBufferL[prevPos];
+                float prevR = beatRepeat.crossfadeBufferR[prevPos];
+
+                outL = outL * (1.0f - crossfade) + prevL * crossfade;
+                outR = outR * (1.0f - crossfade) + prevR * crossfade;
+            }
+
+            wetL[i] = outL * effectAmount * envelope;
+            wetR[i] = outR * effectAmount * envelope;
+
+            // Advance position
             beatRepeat.repeatPos += playbackSpeed;
+            beatRepeat.envelopePhase += 1.0f;
+
+            // Move to next slice when current slice completes
+            if (beatRepeat.repeatPos >= sliceLength)
+            {
+                beatRepeat.repeatPos = 0.0f;
+                beatRepeat.currentSlice = (beatRepeat.currentSlice + 1) % beatRepeat.numSlices;
+            }
         }
         else
         {
