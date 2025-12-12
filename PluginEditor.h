@@ -182,6 +182,16 @@ public:
     void mouseMove (const juce::MouseEvent& event) override;
 
 private:
+    // ========== REFACTORED: timerCallback helper functions ==========
+    void updateButtonStates(bool trigMode);
+    void updateModeLabels(int mode);
+    void updateTrigRateLabel(float trigRate);
+    void updateKnobValueLabels(int mode, float position, float size, float pitch,
+                                float density, float texture, float spread,
+                                float feedback, float reverb, float mix);
+    void updateLedIndicators();
+    void updateBpmDisplay(bool trigMode);
+
     CloudLikeGranularProcessor& processor;
 
     std::unique_ptr<EPaperLookAndFeel> ePaperLookAndFeel;  // Custom LookAndFeel for buttons (managed lifetime)

@@ -184,153 +184,98 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
 
 void CloudLikeGranularEditor::timerCallback()
 {
-    // Update TRIG mode button text based on parameter
-    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
+    // Get current parameter values
+    bool trigMode = processor.apvts.getRawParameterValue("trigMode")->load() > 0.5f;
+    int mode = static_cast<int>(processor.apvts.getRawParameterValue("mode")->load());
+    float trigRate = processor.apvts.getRawParameterValue("trigRate")->load();
+
+    float position = processor.apvts.getRawParameterValue("position")->load();
+    float size = processor.apvts.getRawParameterValue("size")->load();
+    float pitch = processor.apvts.getRawParameterValue("pitch")->load();
+    float density = processor.apvts.getRawParameterValue("density")->load();
+    float texture = processor.apvts.getRawParameterValue("texture")->load();
+    float spread = processor.apvts.getRawParameterValue("spread")->load();
+    float feedback = processor.apvts.getRawParameterValue("feedback")->load();
+    float reverb = processor.apvts.getRawParameterValue("reverb")->load();
+    float mix = processor.apvts.getRawParameterValue("mix")->load();
+
+    // Update UI components using helper functions
+    updateButtonStates(trigMode);
+    updateModeLabels(mode);
+    updateTrigRateLabel(trigRate);
+    updateKnobValueLabels(mode, position, size, pitch, density, texture, spread, feedback, reverb, mix);
+    updateLedIndicators();
+    updateBpmDisplay(trigMode);
+}
+
+// ========== REFACTORED: timerCallback helper functions ==========
+
+void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
+{
+    // Update TRIG mode button
     juce::String trigModeText = trigMode ? "Auto" : "Manual";
     if (trigModeButton.getButtonText() != trigModeText)
-    {
-        trigModeButton.setButtonText (trigModeText);
-    }
+        trigModeButton.setButtonText(trigModeText);
     if (trigModeButton.getToggleState() != trigMode)
-    {
-        trigModeButton.setToggleState (trigMode, juce::dontSendNotification);
-    }
+        trigModeButton.setToggleState(trigMode, juce::dontSendNotification);
 
-    // Update freeze button visual state and text color based on parameter
-    bool freezeState = processor.apvts.getRawParameterValue ("freeze")->load() > 0.5f;
+    // Update freeze button
+    bool freezeState = processor.apvts.getRawParameterValue("freeze")->load() > 0.5f;
     if (freezeButton.getToggleState() != freezeState)
     {
-        freezeButton.setToggleState (freezeState, juce::dontSendNotification);
-        repaint();  // Repaint entire editor to update button highlights
+        freezeButton.setToggleState(freezeState, juce::dontSendNotification);
+        repaint();
     }
 
-    // Change Freeze button text color when ON
     juce::Colour freezeTextColor = freezeState ? uiColors.freezeTextOn : uiColors.freezeTextOff;
-    if (freezeButton.findColour (juce::ToggleButton::textColourId) != freezeTextColor)
-    {
-        freezeButton.setColour (juce::ToggleButton::textColourId, freezeTextColor);
-    }
+    if (freezeButton.findColour(juce::ToggleButton::textColourId) != freezeTextColor)
+        freezeButton.setColour(juce::ToggleButton::textColourId, freezeTextColor);
+}
 
-    // Update knob labels and MODE value display based on mode parameter
-    int mode = static_cast<int>(processor.apvts.getRawParameterValue ("mode")->load());
-
+void CloudLikeGranularEditor::updateModeLabels(int mode)
+{
     // Update MODE value label
     juce::String modeValueText;
     switch (mode)
     {
-        case 0: modeValueText = "GranProc"; break;  // Granular Processor
-        case 1: modeValueText = "Pitch/Time"; break;  // Pitch Shifter / Time Shifter
-        case 2: modeValueText = "LoopDly"; break;  // Looping Delay
-        case 3: modeValueText = "SpctrlMad"; break;  // Spectral Madness
+        case 0: modeValueText = "GranProc"; break;
+        case 1: modeValueText = "Pitch/Time"; break;
+        case 2: modeValueText = "LoopDly"; break;
+        case 3: modeValueText = "SpctrlMad"; break;
         case 4: modeValueText = "Oliverb"; break;
         case 5: modeValueText = "Resonstr"; break;
         case 6: modeValueText = "BeatRpt"; break;
-        case 7: modeValueText = "SpctrlCld"; break;  // Spectral Clouds
+        case 7: modeValueText = "SpctrlCld"; break;
         default: modeValueText = "Unknown"; break;
     }
     if (modeValueLabel.getText() != modeValueText)
-    {
-        modeValueLabel.setText (modeValueText, juce::dontSendNotification);
-    }
+        modeValueLabel.setText(modeValueText, juce::dontSendNotification);
 
     // Define knob labels for each mode
     juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
-
     switch (mode)
     {
-        case 0: // Granular
-            posLabel = "Position";
-            sizeLabel = "Size";
-            pitchLabel = "Pitch";
-            densityLabel = "Density";
-            textureLabel = "Texture";
-            break;
-
-        case 1: // Pitch Shifter (Clouds-style)
-            posLabel = "Position";
-            sizeLabel = "Window";  // Small=Grainy, Large=Smooth
-            pitchLabel = "Pitch";
-            densityLabel = "Density";
-            textureLabel = "Texture";
-            break;
-
-        case 2: // Looping
-            posLabel = "LoopPos";
-            sizeLabel = "LoopLen";
-            pitchLabel = "Speed";
-            densityLabel = "Density";
-            textureLabel = "Texture";
-            break;
-
-        case 3: // Spectral
-            posLabel = "Delay";
-            sizeLabel = "Window";
-            pitchLabel = "FreqShft";
-            densityLabel = "Density";
-            textureLabel = "Texture";
-            break;
-
-        case 4: // Oliverb
-            posLabel = "ModRate";
-            sizeLabel = "Decay";
-            pitchLabel = "Pitch";
-            densityLabel = "ModDepth";
-            textureLabel = "Diffuse";
-            break;
-
-        case 5: // Resonestor
-            posLabel = "Excite";
-            sizeLabel = "Decay";
-            pitchLabel = "Pitch";
-            densityLabel = "Pattern";
-            textureLabel = "Bright";
-            break;
-
-        case 6: // Beat Repeat
-            posLabel = "Capture";
-            sizeLabel = "Length";
-            pitchLabel = "Speed";
-            densityLabel = "Rate";
-            textureLabel = "Stutter";
-            break;
-
-        case 7: // Spectral Clouds
-            posLabel = "Filter";
-            sizeLabel = "Bands";
-            pitchLabel = "Pitch";
-            densityLabel = "Smooth";
-            textureLabel = "Phase";
-            break;
-
-        default:
-            posLabel = "Position";
-            sizeLabel = "Size";
-            pitchLabel = "Pitch";
-            densityLabel = "Density";
-            textureLabel = "Texture";
-            break;
+        case 0: posLabel = "Position"; sizeLabel = "Size"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
+        case 1: posLabel = "Position"; sizeLabel = "Window"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
+        case 2: posLabel = "LoopPos"; sizeLabel = "LoopLen"; pitchLabel = "Speed"; densityLabel = "Density"; textureLabel = "Texture"; break;
+        case 3: posLabel = "Delay"; sizeLabel = "Window"; pitchLabel = "FreqShft"; densityLabel = "Density"; textureLabel = "Texture"; break;
+        case 4: posLabel = "ModRate"; sizeLabel = "Decay"; pitchLabel = "Pitch"; densityLabel = "ModDepth"; textureLabel = "Diffuse"; break;
+        case 5: posLabel = "Excite"; sizeLabel = "Decay"; pitchLabel = "Pitch"; densityLabel = "Pattern"; textureLabel = "Bright"; break;
+        case 6: posLabel = "Capture"; sizeLabel = "Length"; pitchLabel = "Speed"; densityLabel = "Rate"; textureLabel = "Stutter"; break;
+        case 7: posLabel = "Filter"; sizeLabel = "Bands"; pitchLabel = "Pitch"; densityLabel = "Smooth"; textureLabel = "Phase"; break;
+        default: posLabel = "Position"; sizeLabel = "Size"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
     }
 
-    // Update knob labels
-    if (positionKnob.label.getText() != posLabel)
-        positionKnob.label.setText (posLabel, juce::dontSendNotification);
+    if (positionKnob.label.getText() != posLabel) positionKnob.label.setText(posLabel, juce::dontSendNotification);
+    if (sizeKnob.label.getText() != sizeLabel) sizeKnob.label.setText(sizeLabel, juce::dontSendNotification);
+    if (pitchKnob.label.getText() != pitchLabel) pitchKnob.label.setText(pitchLabel, juce::dontSendNotification);
+    if (densityKnob.label.getText() != densityLabel) densityKnob.label.setText(densityLabel, juce::dontSendNotification);
+    if (textureKnob.label.getText() != textureLabel) textureKnob.label.setText(textureLabel, juce::dontSendNotification);
+}
 
-    if (sizeKnob.label.getText() != sizeLabel)
-        sizeKnob.label.setText (sizeLabel, juce::dontSendNotification);
-
-    if (pitchKnob.label.getText() != pitchLabel)
-        pitchKnob.label.setText (pitchLabel, juce::dontSendNotification);
-
-    if (densityKnob.label.getText() != densityLabel)
-        densityKnob.label.setText (densityLabel, juce::dontSendNotification);
-
-    if (textureKnob.label.getText() != textureLabel)
-        textureKnob.label.setText (textureLabel, juce::dontSendNotification);
-
-    // Update TRIG RATE value label to show current division
-    float trigRate = processor.apvts.getRawParameterValue ("trigRate")->load();
+void CloudLikeGranularEditor::updateTrigRateLabel(float trigRate)
+{
     juce::String trigRateValueText;
-
     if (trigRate < -3.4f)      trigRateValueText = "1/16";
     else if (trigRate < -2.8f) trigRateValueText = "1/16T";
     else if (trigRate < -2.2f) trigRateValueText = "1/8";
@@ -344,118 +289,84 @@ void CloudLikeGranularEditor::timerCallback()
     else                       trigRateValueText = "2bars";
 
     if (trigRateValueLabel.getText() != trigRateValueText)
-    {
-        trigRateValueLabel.setText (trigRateValueText, juce::dontSendNotification);
-    }
+        trigRateValueLabel.setText(trigRateValueText, juce::dontSendNotification);
+}
 
-    // Update all knob value labels with mode-specific formatting
-    float position = processor.apvts.getRawParameterValue ("position")->load();
-    float size = processor.apvts.getRawParameterValue ("size")->load();
-    float pitch = processor.apvts.getRawParameterValue ("pitch")->load();
-    float density = processor.apvts.getRawParameterValue ("density")->load();
-    float texture = processor.apvts.getRawParameterValue ("texture")->load();
-    float spread = processor.apvts.getRawParameterValue ("spread")->load();
-    float feedback = processor.apvts.getRawParameterValue ("feedback")->load();
-    float reverb = processor.apvts.getRawParameterValue ("reverb")->load();
-    float mix = processor.apvts.getRawParameterValue ("mix")->load();
-
+void CloudLikeGranularEditor::updateKnobValueLabels(int mode, float position, float size, float pitch,
+                                                     float density, float texture, float spread,
+                                                     float feedback, float reverb, float mix)
+{
     juce::String posValueText, sizeValueText, pitchValueText, densityValueText, textureValueText;
 
-    // Mode-specific formatting
     switch (mode)
     {
-        case 0: // Granular
-        case 1: // Pitch Shifter
-        case 3: // Spectral
-            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+        case 0: case 1: case 3:
+            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
-
-        case 2: // Looping
-        case 6: // Beat Repeat
-            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
-            // Speed: pitch -24 to +24 semitones -> 0.25x to 4x speed
-            pitchValueText = juce::String (std::pow (2.0f, pitch / 12.0f), 2) + "x";
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+        case 2: case 6:
+            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
+            pitchValueText = juce::String(std::pow(2.0f, pitch / 12.0f), 2) + "x";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
-
-        case 4: // Oliverb
-            // ModRate: position 0-1 -> 0-10 Hz
-            posValueText = juce::String (position * 10.0f, 1) + "Hz";
-            // Decay: size 0.016-1.0 -> 2%-100%
-            sizeValueText = juce::String (static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+        case 4:
+            posValueText = juce::String(position * 10.0f, 1) + "Hz";
+            sizeValueText = juce::String(static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
-
-        case 5: // Resonestor
-            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
-            // Decay: size 0.016-1.0 -> 2%-100%
-            sizeValueText = juce::String (static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+        case 5:
+            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String(static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
-
-        case 7: // Spectral Clouds
-            // Filter: position 0-1 -> 0-100% (threshold)
-            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
-            // Bands: size 0-1 -> 4-64 bands
-            sizeValueText = juce::String (4 + static_cast<int>(size * 60.0f));
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
-            // Smooth: density 0-1 -> 0-100%
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            // Phase: texture 0-1 -> 0-100%
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+        case 7:
+            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String(4 + static_cast<int>(size * 60.0f));
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
-
         default:
-            posValueText = juce::String (static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String (static_cast<int>(size * 1000.0f)) + "ms";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String (static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String (static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String (static_cast<int>(texture * 100.0f)) + "%";
+            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
+            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
+            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
+            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
+            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
             break;
     }
 
-    // Common formatting (same for all modes)
-    juce::String spreadValueText = juce::String (static_cast<int>(spread * 100.0f)) + "%";
-    juce::String feedbackValueText = juce::String (static_cast<int>(feedback * 100.0f)) + "%";
-    juce::String reverbValueText = juce::String (static_cast<int>(reverb * 100.0f)) + "%";
-    juce::String mixValueText = juce::String (static_cast<int>(mix * 100.0f)) + "%";
+    juce::String spreadValueText = juce::String(static_cast<int>(spread * 100.0f)) + "%";
+    juce::String feedbackValueText = juce::String(static_cast<int>(feedback * 100.0f)) + "%";
+    juce::String reverbValueText = juce::String(static_cast<int>(reverb * 100.0f)) + "%";
+    juce::String mixValueText = juce::String(static_cast<int>(mix * 100.0f)) + "%";
 
-    // Update labels if changed
-    if (positionValueLabel.getText() != posValueText)
-        positionValueLabel.setText (posValueText, juce::dontSendNotification);
-    if (sizeValueLabel.getText() != sizeValueText)
-        sizeValueLabel.setText (sizeValueText, juce::dontSendNotification);
-    if (pitchValueLabel.getText() != pitchValueText)
-        pitchValueLabel.setText (pitchValueText, juce::dontSendNotification);
-    if (densityValueLabel.getText() != densityValueText)
-        densityValueLabel.setText (densityValueText, juce::dontSendNotification);
-    if (textureValueLabel.getText() != textureValueText)
-        textureValueLabel.setText (textureValueText, juce::dontSendNotification);
-    if (spreadValueLabel.getText() != spreadValueText)
-        spreadValueLabel.setText (spreadValueText, juce::dontSendNotification);
-    if (feedbackValueLabel.getText() != feedbackValueText)
-        feedbackValueLabel.setText (feedbackValueText, juce::dontSendNotification);
-    if (reverbValueLabel.getText() != reverbValueText)
-        reverbValueLabel.setText (reverbValueText, juce::dontSendNotification);
-    if (mixValueLabel.getText() != mixValueText)
-        mixValueLabel.setText (mixValueText, juce::dontSendNotification);
+    if (positionValueLabel.getText() != posValueText) positionValueLabel.setText(posValueText, juce::dontSendNotification);
+    if (sizeValueLabel.getText() != sizeValueText) sizeValueLabel.setText(sizeValueText, juce::dontSendNotification);
+    if (pitchValueLabel.getText() != pitchValueText) pitchValueLabel.setText(pitchValueText, juce::dontSendNotification);
+    if (densityValueLabel.getText() != densityValueText) densityValueLabel.setText(densityValueText, juce::dontSendNotification);
+    if (textureValueLabel.getText() != textureValueText) textureValueLabel.setText(textureValueText, juce::dontSendNotification);
+    if (spreadValueLabel.getText() != spreadValueText) spreadValueLabel.setText(spreadValueText, juce::dontSendNotification);
+    if (feedbackValueLabel.getText() != feedbackValueText) feedbackValueLabel.setText(feedbackValueText, juce::dontSendNotification);
+    if (reverbValueLabel.getText() != reverbValueText) reverbValueLabel.setText(reverbValueText, juce::dontSendNotification);
+    if (mixValueLabel.getText() != mixValueText) mixValueLabel.setText(mixValueText, juce::dontSendNotification);
+}
 
-    // Update LED indicators for tempo visualization
-    // LED 1: Base tempo (×1 quarter note)
+void CloudLikeGranularEditor::updateLedIndicators()
+{
+    // LED 1: Base tempo
     if (processor.baseTempoBlink.load())
     {
         baseTempoLedOn = true;
-        ledBlinkDuration = 3;  // Blink for 3 timer ticks (~100ms at 30Hz)
+        ledBlinkDuration = 3;
         processor.baseTempoBlink.store(false);
         repaint();
     }
@@ -473,7 +384,7 @@ void CloudLikeGranularEditor::timerCallback()
     if (processor.trigRateBlink.load())
     {
         trigRateLedOn = true;
-        ledBlinkDuration2 = 3;  // Blink for 3 timer ticks (~100ms at 30Hz)
+        ledBlinkDuration2 = 3;
         processor.trigRateBlink.store(false);
         repaint();
     }
@@ -486,15 +397,14 @@ void CloudLikeGranularEditor::timerCallback()
             repaint();
         }
     }
+}
 
-    // Update BPM display (Auto mode: DAW BPM, Manual mode: tap tempo BPM)
-    // Note: trigMode already declared at top of function
+void CloudLikeGranularEditor::updateBpmDisplay(bool trigMode)
+{
     float displayBPM = trigMode ? processor.hostBPM.load() : processor.detectedTapBPM.load();
     juce::String bpmText = displayBPM > 0.0f ? juce::String(static_cast<int>(displayBPM)) : "---";
     if (tapBpmLabel.getText() != bpmText)
-    {
-        tapBpmLabel.setText (bpmText, juce::dontSendNotification);
-    }
+        tapBpmLabel.setText(bpmText, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox)

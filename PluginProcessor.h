@@ -598,6 +598,32 @@ private:
 
     void randomizeParameters();
 
+    // ========== REFACTORED: Common Helper Functions ==========
+    // TRIG rate to note value conversion (eliminates code duplication)
+    static double calculateNoteValueFromTrigRate(float trigRate);
+
+    // Ring buffer write with feedback (inline for performance)
+    inline void writeToRingBuffer(float inL, float inR, float fbL, float fbR, bool freeze)
+    {
+        if (!freeze && bufferSize > 0)
+        {
+            ringBuffer.setSample(0, writeHead, inL + fbL);
+            ringBuffer.setSample(1, writeHead, inR + fbR);
+            writeHead = (writeHead + 1) & bufferSizeMask;
+        }
+    }
+
+    // Trigger detection and clear (inline for performance)
+    inline bool checkAndClearTrigger(int sampleIndex)
+    {
+        if (sampleIndex == 0 && triggerReceived.load())
+        {
+            triggerReceived.store(false);
+            return true;
+        }
+        return false;
+    }
+
     // ========== OPTIMIZATION: Block Processing Functions ==========
     // Mode-specific block processing for better cache locality and reduced branching
     void processGranularBlock (juce::AudioBuffer<float>& buffer, int numSamples,
