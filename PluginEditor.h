@@ -211,6 +211,7 @@ private:
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
     juce::Label trigRateLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
+    juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
 
     // LED indicators for tempo visualization
     bool baseTempoLedOn = false;   // LED 1: Base tempo (×1) indicator

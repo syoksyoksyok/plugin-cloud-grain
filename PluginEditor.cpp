@@ -47,7 +47,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     // Setup knobs with their individual LookAndFeel instances
     setupKnob (modeKnob, "Mode", modeLookAndFeel.get());
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 80, 22);  // Set to read-only
+    modeKnob.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);  // No text box - use custom label
 
     setupKnob (positionKnob, "Position", positionLookAndFeel.get());
     setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
@@ -99,11 +99,17 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (trigRateLabel);
+    addAndMakeVisible (modeValueLabel);
 
     // Style TRIG RATE label (E-Paper: shows current division)
     trigRateLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
     trigRateLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     trigRateLabel.setJustificationType (juce::Justification::centred);
+
+    // Style MODE value label (E-Paper: shows current mode name)
+    modeValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+    modeValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    modeValueLabel.setJustificationType (juce::Justification::centred);
 
     // Style TRIG Mode toggle button (E-Paper: matte black text)
     trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
@@ -153,39 +159,6 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
     trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
-
-    // Custom text display for MODE: Show mode names instead of numbers
-    // IMPORTANT: Set this AFTER creating the attachment
-    modeKnob.slider.textFromValueFunction = [](double value)
-    {
-        int mode = static_cast<int>(value);
-        switch (mode)
-        {
-            case 0: return juce::String("Granular");
-            case 1: return juce::String("PitchShft");
-            case 2: return juce::String("Looping");
-            case 3: return juce::String("Spectral");
-            case 4: return juce::String("Oliverb");
-            case 5: return juce::String("Resonstr");
-            case 6: return juce::String("BeatRpt");
-            default: return juce::String("Unknown");
-        }
-    };
-
-    modeKnob.slider.valueFromTextFunction = [](const juce::String& text)
-    {
-        if (text == "Granular")   return 0.0;
-        if (text == "PitchShft")  return 1.0;
-        if (text == "Looping")    return 2.0;
-        if (text == "Spectral")   return 3.0;
-        if (text == "Oliverb")    return 4.0;
-        if (text == "Resonstr")   return 5.0;
-        if (text == "BeatRpt")    return 6.0;
-        return 0.0;  // Default to Granular
-    };
-
-    // Force update the display
-    modeKnob.slider.updateText();
 }
 
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
@@ -241,8 +214,26 @@ void CloudLikeGranularEditor::timerCallback()
         freezeButton.setColour (juce::ToggleButton::textColourId, freezeTextColor);
     }
 
-    // Update knob labels based on mode parameter
+    // Update knob labels and MODE value display based on mode parameter
     int mode = static_cast<int>(processor.apvts.getRawParameterValue ("mode")->load());
+
+    // Update MODE value label
+    juce::String modeValueText;
+    switch (mode)
+    {
+        case 0: modeValueText = "Granular"; break;
+        case 1: modeValueText = "PitchShft"; break;
+        case 2: modeValueText = "Looping"; break;
+        case 3: modeValueText = "Spectral"; break;
+        case 4: modeValueText = "Oliverb"; break;
+        case 5: modeValueText = "Resonstr"; break;
+        case 6: modeValueText = "BeatRpt"; break;
+        default: modeValueText = "Unknown"; break;
+    }
+    if (modeValueLabel.getText() != modeValueText)
+    {
+        modeValueLabel.setText (modeValueText, juce::dontSendNotification);
+    }
 
     // Define knob labels for each mode
     juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
@@ -506,7 +497,12 @@ void CloudLikeGranularEditor::resized()
     placeKnob (feedbackKnob, row2.removeFromLeft (colWidth));
     placeKnob (reverbKnob,   row2.removeFromLeft (colWidth));
     placeKnob (mixKnob,      row2.removeFromLeft (colWidth));
-    placeKnob (modeKnob,     row2.removeFromLeft (colWidth));
+    auto modeKnobArea = row2.removeFromLeft (colWidth);
+    placeKnob (modeKnob,     modeKnobArea);
+
+    // MODE value label (shows current mode name below the knob)
+    auto modeValueLabelArea = modeKnobArea.withHeight (20).withY (modeKnobArea.getBottom() - 25);
+    modeValueLabel.setBounds (modeValueLabelArea);
 
     // Row 3: TRIG Rate (centered, single knob)
     auto trigRateArea = row3.withSizeKeepingCentre (colWidth, rowHeight);
