@@ -47,8 +47,37 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     // Setup knobs with their individual LookAndFeel instances
     setupKnob (modeKnob, "Mode", modeLookAndFeel.get());
     modeKnob.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
+    modeKnob.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 22);
     modeKnob.slider.setNumDecimalPlacesToDisplay(0);  // Display integers only
+
+    // Custom text display for MODE: Show mode names instead of numbers
+    modeKnob.slider.textFromValueFunction = [](double value)
+    {
+        int mode = static_cast<int>(value);
+        switch (mode)
+        {
+            case 0: return juce::String("Granular");
+            case 1: return juce::String("PitchShft");
+            case 2: return juce::String("Looping");
+            case 3: return juce::String("Spectral");
+            case 4: return juce::String("Oliverb");
+            case 5: return juce::String("Resonstr");
+            case 6: return juce::String("BeatRpt");
+            default: return juce::String("Unknown");
+        }
+    };
+
+    modeKnob.slider.valueFromTextFunction = [](const juce::String& text)
+    {
+        if (text == "Granular")   return 0.0;
+        if (text == "PitchShft")  return 1.0;
+        if (text == "Looping")    return 2.0;
+        if (text == "Spectral")   return 3.0;
+        if (text == "Oliverb")    return 4.0;
+        if (text == "Resonstr")   return 5.0;
+        if (text == "BeatRpt")    return 6.0;
+        return 0.0;  // Default to Granular
+    };
 
     setupKnob (positionKnob, "Position", positionLookAndFeel.get());
     setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get());
@@ -99,13 +128,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
-    addAndMakeVisible (modeLabel);
     addAndMakeVisible (trigRateLabel);
-
-    // Style mode label (E-Paper: ink blue for accent)
-    modeLabel.setFont (juce::Font ("Courier New", 16.0f, juce::Font::bold));
-    modeLabel.setColour (juce::Label::textColourId, uiColors.modeLabel);
-    modeLabel.setJustificationType (juce::Justification::centred);
 
     // Style TRIG RATE label (E-Paper: shows current division)
     trigRateLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
@@ -215,9 +238,8 @@ void CloudLikeGranularEditor::timerCallback()
         freezeButton.setColour (juce::ToggleButton::textColourId, freezeTextColor);
     }
 
-    // Update mode label and knob labels based on mode parameter
+    // Update knob labels based on mode parameter
     int mode = static_cast<int>(processor.apvts.getRawParameterValue ("mode")->load());
-    juce::String modeText;
 
     // Define knob labels for each mode
     juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
@@ -225,7 +247,6 @@ void CloudLikeGranularEditor::timerCallback()
     switch (mode)
     {
         case 0: // Granular
-            modeText = "MODE: Granular";
             posLabel = "Position";
             sizeLabel = "Size";
             pitchLabel = "Pitch";
@@ -234,7 +255,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 1: // Pitch Shifter (Clouds-style)
-            modeText = "MODE: Pitch Shifter";
             posLabel = "Position";
             sizeLabel = "Window";  // Small=Grainy, Large=Smooth
             pitchLabel = "Pitch";
@@ -243,7 +263,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 2: // Looping
-            modeText = "MODE: Looping";
             posLabel = "LoopPos";
             sizeLabel = "LoopLen";
             pitchLabel = "Speed";
@@ -252,7 +271,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 3: // Spectral
-            modeText = "MODE: Spectral";
             posLabel = "Delay";
             sizeLabel = "Window";
             pitchLabel = "FreqShft";
@@ -261,7 +279,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 4: // Oliverb
-            modeText = "MODE: Oliverb";
             posLabel = "ModRate";
             sizeLabel = "Decay";
             pitchLabel = "Pitch";
@@ -270,7 +287,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 5: // Resonestor
-            modeText = "MODE: Resonestor";
             posLabel = "Excite";
             sizeLabel = "Decay";
             pitchLabel = "Pitch";
@@ -279,7 +295,6 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         case 6: // Beat Repeat
-            modeText = "MODE: Beat Repeat";
             posLabel = "Capture";
             sizeLabel = "Length";
             pitchLabel = "Speed";
@@ -288,19 +303,12 @@ void CloudLikeGranularEditor::timerCallback()
             break;
 
         default:
-            modeText = "MODE: Unknown";
             posLabel = "Position";
             sizeLabel = "Size";
             pitchLabel = "Pitch";
             densityLabel = "Density";
             textureLabel = "Texture";
             break;
-    }
-
-    // Update mode label
-    if (modeLabel.getText() != modeText)
-    {
-        modeLabel.setText (modeText, juce::dontSendNotification);
     }
 
     // Update knob labels
@@ -414,10 +422,6 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     g.setColour (uiColors.buttonText);
     g.drawRect (getLocalBounds(), 2);
 
-    // Draw separator line below mode label
-    g.setColour (juce::Colour::fromRGB (224, 224, 224));
-    g.fillRect (10, 45, getWidth() - 20, 1);
-
     // Draw separator line above buttons
     g.setColour (juce::Colour::fromRGB (224, 224, 224));
     g.fillRect (10, getHeight() - 60, getWidth() - 20, 1);
@@ -470,14 +474,9 @@ void CloudLikeGranularEditor::resized()
 {
     auto area = getLocalBounds().reduced (10);
 
-    // E-Paper UI: Mode label at top center
-    auto titleArea = area.removeFromTop (35);
-    modeLabel.setBounds (titleArea.withTrimmedLeft (titleArea.getWidth() / 4)
-                                   .withTrimmedRight (titleArea.getWidth() / 4));
-
     // E-Paper UI: 3 rows × 5 columns grid (added 3rd row for TRIG rate)
     auto buttonRow = area.removeFromBottom (50);
-    auto knobArea = area.reduced (0, 10);
+    auto knobArea = area.reduced (0, 5);
 
     auto rowHeight = knobArea.getHeight() / 3;
     auto row1 = knobArea.removeFromTop (rowHeight);

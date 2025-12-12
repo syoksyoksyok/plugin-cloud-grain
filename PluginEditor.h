@@ -210,7 +210,6 @@ private:
     juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
-    juce::Label modeLabel;  // Displays current mode (Granular/Pitch Shifter/etc.)
     juce::Label trigRateLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
 
     // LED indicators for tempo visualization
