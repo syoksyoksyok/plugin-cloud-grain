@@ -1542,13 +1542,32 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             spectralBandUpdateCounter = 0;
 
             // Generate new random band mask based on DENSITY
-            int numBands = 2 + static_cast<int>(density * 30.0f);  // 2 to 32 bands
-            numBands = juce::jlimit(2, 32, numBands);
-
-            for (int band = 0; band < numBands; ++band)
+            // DENSITY 0 = no masking (all bands pass)
+            // DENSITY 1 = heavy masking (many bands muted)
+            if (density < 0.05f)
             {
-                // Random mask: 50% chance to pass, 50% to mute
-                spectralBandMask[band] = (uniform(rng) > 0.5f) ? 1.0f : 0.0f;
+                // Low density: no masking, all bands pass
+                spectralBandMask.fill(1.0f);
+            }
+            else
+            {
+                int numBands = 2 + static_cast<int>(density * 30.0f);  // 2 to 32 bands
+                numBands = juce::jlimit(2, 32, numBands);
+
+                // Mute probability increases with density
+                float muteProbability = density * 0.7f;  // Max 70% mute probability
+
+                for (int band = 0; band < numBands; ++band)
+                {
+                    // Random mask with density-controlled probability
+                    spectralBandMask[band] = (uniform(rng) > muteProbability) ? 1.0f : 0.0f;
+                }
+
+                // Fill unused bands with 1.0f (pass through)
+                for (int band = numBands; band < 32; ++band)
+                {
+                    spectralBandMask[band] = 1.0f;
+                }
             }
         }
 
@@ -1595,22 +1614,23 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             spectralShiftedR.fill(0.0f);
 
             const int halfFFT = fftSize >> 1;
-            const float twoPi = juce::MathConstants<float>::twoPi;
 
-            // === Option 5: Phase vocoder for pitch shifting ===
+            // Process frequency bins with simplified approach
             for (int bin = 0; bin < halfFFT; ++bin)
             {
                 int binIdx = bin << 1;
 
-                // Extract magnitude and phase from FFT data
+                // Extract real and imaginary parts
                 float realL = fftDataL[binIdx];
                 float imagL = fftDataL[binIdx + 1];
                 float realR = fftDataR[binIdx];
                 float imagR = fftDataR[binIdx + 1];
 
+                // Calculate magnitude
                 float magnitudeL = std::sqrt(realL * realL + imagL * imagL);
                 float magnitudeR = std::sqrt(realR * realR + imagR * imagR);
 
+                // Extract phase (for TEXTURE effects)
                 float phaseL = std::atan2(imagL, realL);
                 float phaseR = std::atan2(imagR, realR);
 
@@ -1623,41 +1643,14 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
                     magnitudeR = std::floor(magnitudeR * quantLevels) / quantLevels;
                 }
 
-                // Phase vocoder: compute phase difference
-                float phaseDiffL = phaseL - spectralPrevPhaseL[bin];
-                float phaseDiffR = phaseR - spectralPrevPhaseR[bin];
-
-                // Wrap phase difference to [-π, π]
-                while (phaseDiffL > juce::MathConstants<float>::pi) phaseDiffL -= twoPi;
-                while (phaseDiffL < -juce::MathConstants<float>::pi) phaseDiffL += twoPi;
-                while (phaseDiffR > juce::MathConstants<float>::pi) phaseDiffR -= twoPi;
-                while (phaseDiffR < -juce::MathConstants<float>::pi) phaseDiffR += twoPi;
-
-                spectralPrevPhaseL[bin] = phaseL;
-                spectralPrevPhaseR[bin] = phaseR;
-
-                // Compute instantaneous frequency
-                float expectedPhaseInc = (twoPi * bin) / fftSize;
-                float freqDeviationL = (phaseDiffL - expectedPhaseInc) / hopSize;
-                float freqDeviationR = (phaseDiffR - expectedPhaseInc) / hopSize;
-
                 // Calculate target bin for pitch shifting
                 int targetBin = static_cast<int>(bin * pitchRatio);
 
                 if (targetBin >= 0 && targetBin < halfFFT)
                 {
-                    // Update accumulated phase for target bin
-                    spectralPhaseAccumL[targetBin] += (expectedPhaseInc + freqDeviationL) * pitchRatio;
-                    spectralPhaseAccumR[targetBin] += (expectedPhaseInc + freqDeviationR) * pitchRatio;
-
-                    // Wrap accumulated phase
-                    while (spectralPhaseAccumL[targetBin] > twoPi) spectralPhaseAccumL[targetBin] -= twoPi;
-                    while (spectralPhaseAccumL[targetBin] < -twoPi) spectralPhaseAccumL[targetBin] += twoPi;
-                    while (spectralPhaseAccumR[targetBin] > twoPi) spectralPhaseAccumR[targetBin] -= twoPi;
-                    while (spectralPhaseAccumR[targetBin] < -twoPi) spectralPhaseAccumR[targetBin] += twoPi;
-
-                    float outPhaseL = spectralPhaseAccumL[targetBin];
-                    float outPhaseR = spectralPhaseAccumR[targetBin];
+                    // Use original phase (simple approach)
+                    float outPhaseL = phaseL;
+                    float outPhaseR = phaseR;
 
                     // === Option 1: TEXTURE effects ===
                     if (texture < 0.33f)
