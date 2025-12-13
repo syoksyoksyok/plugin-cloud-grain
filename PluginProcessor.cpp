@@ -682,26 +682,16 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             }
         }
 
-        // LED 1: Tap tempo or MIDI note triggers in Manual mode
-        bool currentMidiNoteState = false;
-
-        // Process MIDI triggers
+        // Process MIDI triggers - trigger on every Note On
         for (const auto metadata : midi)
         {
             auto message = metadata.getMessage();
 
-            // Trigger on both note on and note off
-            if (message.isNoteOn() || message.isNoteOff())
+            // Trigger on every Note On (velocity > 0)
+            if (message.isNoteOn() && message.getVelocity() > 0)
             {
-                currentMidiNoteState = message.isNoteOn();
-
-                // Edge detection: trigger on state change
-                if (currentMidiNoteState != lastMidiNoteState)
-                {
-                    triggerReceived.store(true);
-                    baseTempoBlink.store(true);  // LED 1: MIDI trigger in Manual mode
-                    lastMidiNoteState = currentMidiNoteState;
-                }
+                triggerReceived.store(true);
+                baseTempoBlink.store(true);  // LED: MIDI trigger indicator
             }
         }
 

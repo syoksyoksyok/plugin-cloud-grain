@@ -466,8 +466,15 @@ void CloudLikeGranularEditor::updateLedIndicators()
 
 void CloudLikeGranularEditor::updateBpmDisplay(bool trigMode)
 {
-    float displayBPM = trigMode ? processor.hostBPM.load() : processor.detectedTapBPM.load();
-    juce::String bpmText = displayBPM > 0.0f ? juce::String(static_cast<int>(displayBPM)) : "---";
+    // Manual mode: show "---" (no BPM display)
+    // Auto mode: show host BPM
+    juce::String bpmText = "---";
+    if (trigMode)
+    {
+        float displayBPM = processor.hostBPM.load();
+        if (displayBPM > 0.0f)
+            bpmText = juce::String(static_cast<int>(displayBPM));
+    }
     if (tapBpmLabel.getText() != bpmText)
         tapBpmLabel.setText(bpmText, juce::dontSendNotification);
 }
