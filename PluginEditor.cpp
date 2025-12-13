@@ -177,7 +177,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     };
 
     // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
-    tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
+    tapBpmLabel.setFont (juce::Font ("Courier New", 10.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     tapBpmLabel.setJustificationType (juce::Justification::centred);
     tapBpmLabel.setText ("---", juce::dontSendNotification);
