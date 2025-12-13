@@ -82,6 +82,7 @@ namespace UISize
     constexpr int knobLabelOffsetY = 25;  // Distance from knob bottom to label
 
     // Buttons
+    constexpr int buttonWidth = 83;    // 2/3 of original (124 * 2/3)
     constexpr int buttonHeight = 36;
     constexpr int buttonRowHeight = 50;
     constexpr int buttonPadding = 3;
@@ -183,9 +184,9 @@ public:
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
 
-        // E-Paper button border
-        g.setColour (uiColors.buttonText);
-        g.drawRect (bounds, 2.0f);
+        // E-Paper button border (MIX knob outline color, half thickness)
+        g.setColour (uiColors.mix.outline);
+        g.drawRect (bounds, 1.0f);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
@@ -199,9 +200,9 @@ public:
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
 
-        // E-Paper button border
-        g.setColour (uiColors.buttonText);
-        g.drawRect (bounds, 2.0f);
+        // E-Paper button border (MIX knob outline color, half thickness)
+        g.setColour (uiColors.mix.outline);
+        g.drawRect (bounds, 1.0f);
 
         // Draw text centered (color changes based on toggle state)
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
@@ -269,9 +270,9 @@ private:
 
     juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
-    juce::TextButton randomButton { "Randomize" };
-    juce::TextButton killDryButton { "Kill Dry" };  // Momentary: forces MIX to 100% while pressed
-    juce::TextButton killWetButton { "Kill Wet" };  // Momentary: forces MIX to 0% while pressed
+    juce::TextButton randomButton { "Rnd" };
+    juce::TextButton killDryButton { "KillDry" };  // Momentary: forces MIX to 100% while pressed
+    juce::TextButton killWetButton { "KillWet" };  // Momentary: forces MIX to 0% while pressed
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
     juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo
