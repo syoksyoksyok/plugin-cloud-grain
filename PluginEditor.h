@@ -69,6 +69,14 @@ struct UIColors
     juce::Colour freezeTextOff           { 26, 26, 26 };
     juce::Colour momentaryOnColor        { 0xFFC94C63 };  // Position knob color for Kill Dry/Wet
 
+    // Toggle switch colors
+    juce::Colour toggleTrackOff          { 230, 230, 230 };
+    juce::Colour toggleTrackOn           { 102, 102, 102 };
+    juce::Colour toggleThumb             { 255, 255, 255 };
+    juce::Colour toggleThumbBorder       { 180, 180, 180 };
+    juce::Colour toggleLabelOff          { 160, 160, 160 };
+    juce::Colour toggleLabelOn           { 26, 26, 26 };
+
     // Label colors
     juce::Colour knobLabel { 102, 102, 102 };
 
@@ -108,6 +116,12 @@ namespace UISize
     constexpr int buttonHeight = 36;
     constexpr int buttonRowHeight = 50;
     constexpr int buttonPadding = 3;
+
+    // Toggle switch dimensions
+    constexpr int toggleWidth = 120;
+    constexpr int toggleHeight = 28;
+    constexpr int toggleThumbSize = 22;
+    constexpr int toggleTrackHeight = 20;
 
     constexpr int bpmDisplaySize = 40;
     constexpr int bpmFontSize = 10;
@@ -210,6 +224,15 @@ public:
                           bool, bool shouldDrawButtonAsDown) override
     {
         auto bounds = button.getLocalBounds().toFloat();
+
+        // Check if this is a toggle switch style button (by component ID)
+        if (button.getComponentID() == "toggleSwitch")
+        {
+            drawToggleSwitch (g, button, bounds);
+            return;
+        }
+
+        // Standard toggle button style
         auto fontSize = juce::jmin (15.0f, button.getHeight() * 0.4f);
 
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
@@ -220,6 +243,61 @@ public:
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
         g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
         g.drawText (button.getButtonText(), bounds, juce::Justification::centred, true);
+    }
+
+    void drawToggleSwitch (juce::Graphics& g, juce::ToggleButton& button, juce::Rectangle<float> bounds)
+    {
+        bool isOn = button.getToggleState();
+        float height = bounds.getHeight();
+        float trackHeight = height * 0.7f;
+        float thumbSize = height * 0.85f;
+        float trackY = bounds.getCentreY() - trackHeight / 2.0f;
+        float cornerRadius = trackHeight / 2.0f;
+
+        // Calculate track bounds (center portion for the actual track)
+        float labelWidth = bounds.getWidth() * 0.32f;
+        float trackWidth = bounds.getWidth() - labelWidth * 2.0f;
+        float trackX = bounds.getX() + labelWidth;
+        auto trackBounds = juce::Rectangle<float> (trackX, trackY, trackWidth, trackHeight);
+
+        // Draw track background
+        g.setColour (isOn ? uiColors.toggleTrackOn : uiColors.toggleTrackOff);
+        g.fillRoundedRectangle (trackBounds, cornerRadius);
+
+        // Draw track border
+        g.setColour (uiColors.toggleThumbBorder);
+        g.drawRoundedRectangle (trackBounds, cornerRadius, 1.0f);
+
+        // Calculate thumb position
+        float thumbPadding = (trackHeight - thumbSize) / 2.0f + 1.0f;
+        float thumbX = isOn
+            ? trackBounds.getRight() - thumbSize - thumbPadding
+            : trackBounds.getX() + thumbPadding;
+        float thumbY = bounds.getCentreY() - thumbSize / 2.0f;
+
+        // Draw thumb shadow
+        g.setColour (juce::Colours::black.withAlpha (0.1f));
+        g.fillEllipse (thumbX + 1.0f, thumbY + 1.0f, thumbSize, thumbSize);
+
+        // Draw thumb
+        g.setColour (uiColors.toggleThumb);
+        g.fillEllipse (thumbX, thumbY, thumbSize, thumbSize);
+        g.setColour (uiColors.toggleThumbBorder);
+        g.drawEllipse (thumbX, thumbY, thumbSize, thumbSize, 1.0f);
+
+        // Draw labels
+        float fontSize = height * 0.42f;
+        g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
+
+        // "Manual" label on left
+        auto leftLabelBounds = juce::Rectangle<float> (bounds.getX(), bounds.getY(), labelWidth - 4.0f, height);
+        g.setColour (isOn ? uiColors.toggleLabelOff : uiColors.toggleLabelOn);
+        g.drawText ("Manual", leftLabelBounds, juce::Justification::centredRight, false);
+
+        // "Auto" label on right
+        auto rightLabelBounds = juce::Rectangle<float> (trackBounds.getRight() + 4.0f, bounds.getY(), labelWidth - 4.0f, height);
+        g.setColour (isOn ? uiColors.toggleLabelOn : uiColors.toggleLabelOff);
+        g.drawText ("Auto", rightLabelBounds, juce::Justification::centredLeft, false);
     }
 };
 
