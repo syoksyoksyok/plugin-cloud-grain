@@ -228,10 +228,57 @@ public:
                               bool, bool shouldDrawButtonAsDown) override
     {
         auto bounds = button.getLocalBounds().toFloat();
-        g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
-        g.fillRect (bounds);
-        g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
-        g.drawRect (bounds, 1.0f);
+        float cornerRadius = 4.0f;
+
+        if (shouldDrawButtonAsDown)
+        {
+            // Pressed state: Classic Bevel pressed effect
+            // Background gradient (reversed - darker at top)
+            juce::ColourGradient pressedGradient (
+                juce::Colour (0xFFc0c0c0), bounds.getX(), bounds.getY(),
+                juce::Colour (0xFFd0d0d0), bounds.getX(), bounds.getBottom(), false);
+            g.setGradientFill (pressedGradient);
+            g.fillRoundedRectangle (bounds, cornerRadius);
+
+            // Inner shadow (inset effect)
+            g.setColour (juce::Colours::black.withAlpha (0.2f));
+            g.drawHorizontalLine (static_cast<int>(bounds.getY() + 1), bounds.getX() + 2, bounds.getRight() - 2);
+            g.drawHorizontalLine (static_cast<int>(bounds.getY() + 2), bounds.getX() + 2, bounds.getRight() - 2);
+
+            // Beveled border: inverted (top-left dark, bottom-right light)
+            g.setColour (juce::Colour (0xFF888888));  // Top edge (dark)
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getY(), 1.5f);
+            g.setColour (juce::Colour (0xFF999999));  // Left edge (dark)
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getX(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFFdddddd));  // Bottom edge (light)
+            g.drawLine (bounds.getX(), bounds.getBottom(), bounds.getRight(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFFcccccc));  // Right edge (light)
+            g.drawLine (bounds.getRight(), bounds.getY(), bounds.getRight(), bounds.getBottom(), 1.5f);
+        }
+        else
+        {
+            // Normal state: Classic Bevel raised effect
+            // Drop shadow
+            g.setColour (juce::Colours::black.withAlpha (0.2f));
+            g.fillRoundedRectangle (bounds.translated (2.0f, 2.0f), cornerRadius);
+
+            // Background gradient (lighter at top)
+            juce::ColourGradient normalGradient (
+                juce::Colour (0xFFf0f0f0), bounds.getX(), bounds.getY(),
+                juce::Colour (0xFFc0c0c0), bounds.getX(), bounds.getBottom(), false);
+            g.setGradientFill (normalGradient);
+            g.fillRoundedRectangle (bounds, cornerRadius);
+
+            // Beveled border: top-left light, bottom-right dark
+            g.setColour (juce::Colour (0xFFdddddd));  // Top edge (light)
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getY(), 1.5f);
+            g.setColour (juce::Colour (0xFFcccccc));  // Left edge (light)
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getX(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFF888888));  // Bottom edge (dark)
+            g.drawLine (bounds.getX(), bounds.getBottom(), bounds.getRight(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFF999999));  // Right edge (dark)
+            g.drawLine (bounds.getRight(), bounds.getY(), bounds.getRight(), bounds.getBottom(), 1.5f);
+        }
     }
 
     void drawButtonText (juce::Graphics& g, juce::TextButton& button,
@@ -259,13 +306,58 @@ public:
             return;
         }
 
-        // Standard toggle button style
+        // Standard toggle button style with Classic Bevel
         auto fontSize = juce::jmin (15.0f, button.getHeight() * 0.4f);
+        float cornerRadius = 4.0f;
 
-        g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
-        g.fillRect (bounds);
-        g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
-        g.drawRect (bounds, 1.0f);
+        if (shouldDrawButtonAsDown)
+        {
+            // Pressed state: Classic Bevel pressed effect
+            juce::ColourGradient pressedGradient (
+                juce::Colour (0xFFc0c0c0), bounds.getX(), bounds.getY(),
+                juce::Colour (0xFFd0d0d0), bounds.getX(), bounds.getBottom(), false);
+            g.setGradientFill (pressedGradient);
+            g.fillRoundedRectangle (bounds, cornerRadius);
+
+            // Inner shadow
+            g.setColour (juce::Colours::black.withAlpha (0.2f));
+            g.drawHorizontalLine (static_cast<int>(bounds.getY() + 1), bounds.getX() + 2, bounds.getRight() - 2);
+            g.drawHorizontalLine (static_cast<int>(bounds.getY() + 2), bounds.getX() + 2, bounds.getRight() - 2);
+
+            // Beveled border: inverted
+            g.setColour (juce::Colour (0xFF888888));
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getY(), 1.5f);
+            g.setColour (juce::Colour (0xFF999999));
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getX(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFFdddddd));
+            g.drawLine (bounds.getX(), bounds.getBottom(), bounds.getRight(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFFcccccc));
+            g.drawLine (bounds.getRight(), bounds.getY(), bounds.getRight(), bounds.getBottom(), 1.5f);
+        }
+        else
+        {
+            // Normal state: Classic Bevel raised effect
+            // Drop shadow
+            g.setColour (juce::Colours::black.withAlpha (0.2f));
+            g.fillRoundedRectangle (bounds.translated (2.0f, 2.0f), cornerRadius);
+
+            // Background gradient
+            juce::ColourGradient normalGradient (
+                juce::Colour (0xFFf0f0f0), bounds.getX(), bounds.getY(),
+                juce::Colour (0xFFc0c0c0), bounds.getX(), bounds.getBottom(), false);
+            g.setGradientFill (normalGradient);
+            g.fillRoundedRectangle (bounds, cornerRadius);
+
+            // Beveled border: top-left light, bottom-right dark
+            g.setColour (juce::Colour (0xFFdddddd));
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getY(), 1.5f);
+            g.setColour (juce::Colour (0xFFcccccc));
+            g.drawLine (bounds.getX(), bounds.getY(), bounds.getX(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFF888888));
+            g.drawLine (bounds.getX(), bounds.getBottom(), bounds.getRight(), bounds.getBottom(), 1.5f);
+            g.setColour (juce::Colour (0xFF999999));
+            g.drawLine (bounds.getRight(), bounds.getY(), bounds.getRight(), bounds.getBottom(), 1.5f);
+        }
 
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
         g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
@@ -276,10 +368,11 @@ public:
     {
         bool isOn = button.getToggleState();
         float height = bounds.getHeight();
-        float trackHeight = height * 0.7f;
-        float thumbSize = height * 0.85f;
+        float trackHeight = height * 0.8f;
+        float thumbHeight = trackHeight - 4.0f;
+        float thumbWidth = thumbHeight * 1.1f;
         float trackY = bounds.getCentreY() - trackHeight / 2.0f;
-        float cornerRadius = trackHeight / 2.0f;
+        float cornerRadius = 4.0f;  // Classic Bevel: square-ish corners
 
         // Calculate track bounds (center portion for the actual track)
         float labelWidth = bounds.getWidth() * 0.32f;
@@ -287,30 +380,58 @@ public:
         float trackX = bounds.getX() + labelWidth;
         auto trackBounds = juce::Rectangle<float> (trackX, trackY, trackWidth, trackHeight);
 
-        // Draw track background
-        g.setColour (isOn ? uiColors.toggleTrackOn : uiColors.toggleTrackOff);
+        // Classic Bevel: Draw track with gradient and beveled edges
+        // Track background gradient (darker = recessed)
+        juce::ColourGradient trackGradient (
+            juce::Colour (0xFF909090), trackBounds.getX(), trackBounds.getY(),
+            juce::Colour (0xFFb0b0b0), trackBounds.getX(), trackBounds.getBottom(), false);
+        g.setGradientFill (trackGradient);
         g.fillRoundedRectangle (trackBounds, cornerRadius);
 
-        // Draw track border
-        g.setColour (uiColors.toggleThumbBorder);
-        g.drawRoundedRectangle (trackBounds, cornerRadius, 1.0f);
+        // Inner shadow (inset effect)
+        g.setColour (juce::Colours::black.withAlpha (0.3f));
+        g.drawHorizontalLine (static_cast<int>(trackBounds.getY() + 1), trackBounds.getX() + 2, trackBounds.getRight() - 2);
+        g.drawHorizontalLine (static_cast<int>(trackBounds.getY() + 2), trackBounds.getX() + 2, trackBounds.getRight() - 2);
+
+        // Beveled border: top-left dark, bottom-right light
+        g.setColour (juce::Colour (0xFF666666));  // Top edge (dark)
+        g.drawLine (trackBounds.getX(), trackBounds.getY(), trackBounds.getRight(), trackBounds.getY(), 1.5f);
+        g.setColour (juce::Colour (0xFF777777));  // Left edge (dark)
+        g.drawLine (trackBounds.getX(), trackBounds.getY(), trackBounds.getX(), trackBounds.getBottom(), 1.5f);
+        g.setColour (juce::Colour (0xFFbbbbbb));  // Bottom edge (light)
+        g.drawLine (trackBounds.getX(), trackBounds.getBottom(), trackBounds.getRight(), trackBounds.getBottom(), 1.5f);
+        g.setColour (juce::Colour (0xFFaaaaaa));  // Right edge (light)
+        g.drawLine (trackBounds.getRight(), trackBounds.getY(), trackBounds.getRight(), trackBounds.getBottom(), 1.5f);
 
         // Calculate thumb position
-        float thumbPadding = (trackHeight - thumbSize) / 2.0f + 1.0f;
+        float thumbPadding = 2.0f;
         float thumbX = isOn
-            ? trackBounds.getRight() - thumbSize - thumbPadding
+            ? trackBounds.getRight() - thumbWidth - thumbPadding
             : trackBounds.getX() + thumbPadding;
-        float thumbY = bounds.getCentreY() - thumbSize / 2.0f;
+        float thumbY = bounds.getCentreY() - thumbHeight / 2.0f;
+        auto thumbBounds = juce::Rectangle<float> (thumbX, thumbY, thumbWidth, thumbHeight);
 
-        // Draw thumb shadow
-        g.setColour (juce::Colours::black.withAlpha (0.1f));
-        g.fillEllipse (thumbX + 1.0f, thumbY + 1.0f, thumbSize, thumbSize);
+        // Classic Bevel: Draw thumb with gradient and beveled edges
+        // Drop shadow for thumb
+        g.setColour (juce::Colours::black.withAlpha (0.25f));
+        g.fillRoundedRectangle (thumbBounds.translated (1.5f, 1.5f), 3.0f);
 
-        // Draw thumb
-        g.setColour (uiColors.toggleThumb);
-        g.fillEllipse (thumbX, thumbY, thumbSize, thumbSize);
-        g.setColour (uiColors.toggleThumbBorder);
-        g.drawEllipse (thumbX, thumbY, thumbSize, thumbSize, 1.0f);
+        // Thumb gradient (lighter at top)
+        juce::ColourGradient thumbGradient (
+            juce::Colour (0xFFe0e0e0), thumbBounds.getX(), thumbBounds.getY(),
+            juce::Colour (0xFFa0a0a0), thumbBounds.getX(), thumbBounds.getBottom(), false);
+        g.setGradientFill (thumbGradient);
+        g.fillRoundedRectangle (thumbBounds, 3.0f);
+
+        // Thumb beveled border: top-left light, bottom-right dark
+        g.setColour (juce::Colour (0xFFcccccc));  // Top edge (light)
+        g.drawLine (thumbBounds.getX() + 2, thumbBounds.getY(), thumbBounds.getRight() - 2, thumbBounds.getY(), 1.0f);
+        g.setColour (juce::Colour (0xFFbbbbbb));  // Left edge (light)
+        g.drawLine (thumbBounds.getX(), thumbBounds.getY() + 2, thumbBounds.getX(), thumbBounds.getBottom() - 2, 1.0f);
+        g.setColour (juce::Colour (0xFF777777));  // Bottom edge (dark)
+        g.drawLine (thumbBounds.getX() + 2, thumbBounds.getBottom(), thumbBounds.getRight() - 2, thumbBounds.getBottom(), 1.0f);
+        g.setColour (juce::Colour (0xFF888888));  // Right edge (dark)
+        g.drawLine (thumbBounds.getRight(), thumbBounds.getY() + 2, thumbBounds.getRight(), thumbBounds.getBottom() - 2, 1.0f);
 
         // Draw labels
         float fontSize = height * 0.42f;
