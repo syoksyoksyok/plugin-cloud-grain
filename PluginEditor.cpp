@@ -27,8 +27,8 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (tapBpmLabel);
     addAndMakeVisible (tapButton);
 
-    // TrigMode button style
-    trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
+    // TrigMode toggle switch style
+    trigModeButton.setComponentID ("toggleSwitch");
     trigModeButton.setLookAndFeel (lookAndFeel.get());
 
     // Freeze button style
@@ -198,11 +198,12 @@ void CloudLikeGranularEditor::timerCallback()
 //==============================================================================
 void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
 {
-    juce::String trigModeText = trigMode ? "Auto" : "Manual";
-    if (trigModeButton.getButtonText() != trigModeText)
-        trigModeButton.setButtonText(trigModeText);
+    // Toggle switch reads state directly, just ensure state is synced
     if (trigModeButton.getToggleState() != trigMode)
+    {
         trigModeButton.setToggleState(trigMode, juce::dontSendNotification);
+        trigModeButton.repaint();
+    }
 
     bool freezeState = processor.apvts.getRawParameterValue("freeze")->load() > 0.5f;
     if (freezeButton.getToggleState() != freezeState)
@@ -586,15 +587,26 @@ void CloudLikeGranularEditor::resized()
     int btnH = scaled (UISize::buttonHeight);
     int btnY = btnRowY + (btnRowH - btnH) / 2;
 
-    int totalBtnWidth = btnW * 5 + btnPadding * 8;
+    // Toggle switch dimensions
+    int toggleW = scaled (UISize::toggleWidth);
+    int toggleH = scaled (UISize::toggleHeight);
+    int toggleY = btnRowY + (btnRowH - toggleH) / 2;
+
+    // Calculate layout: toggle switch + 4 regular buttons
+    int totalBtnWidth = toggleW + btnW * 4 + btnPadding * 8;
     int btnStartX = (scaled (UISize::baseWidth) - totalBtnWidth) / 2;
+
+    // Place toggle switch first
+    trigModeButton.setBounds (btnStartX, toggleY, toggleW, toggleH);
+
+    // Place remaining buttons after toggle
+    int regularBtnStartX = btnStartX + toggleW + btnPadding * 2;
     int btnSpacing = btnW + btnPadding * 2;
 
-    trigModeButton.setBounds (btnStartX + btnSpacing * 0, btnY, btnW, btnH);
-    freezeButton.setBounds   (btnStartX + btnSpacing * 1, btnY, btnW, btnH);
-    randomButton.setBounds   (btnStartX + btnSpacing * 2, btnY, btnW, btnH);
-    killDryButton.setBounds  (btnStartX + btnSpacing * 3, btnY, btnW, btnH);
-    killWetButton.setBounds  (btnStartX + btnSpacing * 4, btnY, btnW, btnH);
+    freezeButton.setBounds   (regularBtnStartX + btnSpacing * 0, btnY, btnW, btnH);
+    randomButton.setBounds   (regularBtnStartX + btnSpacing * 1, btnY, btnW, btnH);
+    killDryButton.setBounds  (regularBtnStartX + btnSpacing * 2, btnY, btnW, btnH);
+    killWetButton.setBounds  (regularBtnStartX + btnSpacing * 3, btnY, btnW, btnH);
 }
 
 //==============================================================================
