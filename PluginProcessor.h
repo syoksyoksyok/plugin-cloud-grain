@@ -565,6 +565,7 @@ private:
     // TRIG system internal state (private)
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
     double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED
+    bool previousTapState = false;  // For tap parameter edge detection
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;

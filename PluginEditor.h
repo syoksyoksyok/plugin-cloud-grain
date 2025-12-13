@@ -222,7 +222,8 @@ private:
     juce::TextButton killWetButton { "Kill Wet" };  // Momentary: forces MIX to 0% while pressed
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
-    juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo (clickable for tap tempo)
+    juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo
+    juce::TextButton tapButton;  // Transparent tap button overlay (Manual mode only)
 
     // Custom value labels for all knobs (displays meaningful text instead of raw numbers)
     juce::Label positionValueLabel;

@@ -65,6 +65,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
+    addAndMakeVisible (tapButton);
     addAndMakeVisible (positionValueLabel);
     addAndMakeVisible (sizeValueLabel);
     addAndMakeVisible (pitchValueLabel);
@@ -177,12 +178,31 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
-    // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
+    // Style tap BPM label (E-Paper: circular display like a knob)
     tapBpmLabel.setFont (juce::Font ("Courier New", 10.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     tapBpmLabel.setJustificationType (juce::Justification::centred);
     tapBpmLabel.setText ("---", juce::dontSendNotification);
-    tapBpmLabel.setInterceptsMouseClicks (false, true);  // Allow parent to receive mouse events
+    tapBpmLabel.setInterceptsMouseClicks (false, false);  // Let tap button receive clicks
+
+    // Style tap button (transparent overlay for Manual mode tap trigger)
+    // Parameter is in APVTS so Ableton Configure can map it
+    tapButton.setButtonText ("");  // No text, transparent overlay
+    tapButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentWhite);
+    tapButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentWhite);
+    tapButton.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentWhite);
+
+    // Tap button: Momentary - ON while mouse is down
+    tapButton.onStateChange = [this]
+    {
+        if (auto* param = processor.apvts.getParameter ("tap"))
+        {
+            bool isDown = tapButton.isDown();
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
 
     auto& apvts = processor.apvts;
 
@@ -312,6 +332,21 @@ void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
     {
         killWetButton.setColour(juce::TextButton::textColourOffId, killWetTextColor);
         killWetButton.repaint();
+    }
+
+    // Update tap button (only active in Manual mode)
+    if (!trigMode)
+    {
+        // Manual mode: show tap button with pointing hand cursor
+        if (!tapButton.isVisible())
+            tapButton.setVisible(true);
+        tapButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    }
+    else
+    {
+        // Auto mode: hide tap button (BPM display from DAW)
+        if (tapButton.isVisible())
+            tapButton.setVisible(false);
     }
 }
 
@@ -727,8 +762,10 @@ void CloudLikeGranularEditor::resized()
     auto trigRateValueLabelArea = trigRateArea.withHeight (20).withY (trigRateArea.getBottom() - 25);
     trigRateValueLabel.setBounds (trigRateValueLabelArea);
 
-    // Tap BPM label (circular display like a knob, clickable for tap tempo)
+    // Tap BPM label (circular display like a knob)
     tapBpmLabel.setBounds (tapBpmArea);
+    // Tap button (transparent overlay for Manual mode tap trigger)
+    tapButton.setBounds (tapBpmArea);
 
     // E-Paper UI: Buttons at bottom (5 buttons: TrigMode, Freeze, Randomize, Kill Dry, Kill Wet)
     // All buttons have equal size and spacing
@@ -749,39 +786,12 @@ void CloudLikeGranularEditor::resized()
     killWetButton.setBounds (killWetArea);
 }
 
-void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
+void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& /*event*/)
 {
-    // Check if TAP circle was clicked (only in Manual mode)
-    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
-
-    // Get TAP label bounds and check if click is inside
-    auto bpmBounds = tapBpmLabel.getBounds();
-    auto clickPos = event.getPosition();
-
-    if (!trigMode && bpmBounds.contains (clickPos))
-    {
-        // Trigger event on tap click
-        processor.triggerReceived.store (true);
-        processor.trigRateBlink.store (true);  // TRIG LED blink (Manual mode)
-
-        // Force repaint to show visual feedback
-        repaint();
-    }
+    // Tap functionality now handled by tapButton
 }
 
-void CloudLikeGranularEditor::mouseMove (const juce::MouseEvent& event)
+void CloudLikeGranularEditor::mouseMove (const juce::MouseEvent& /*event*/)
 {
-    // Change cursor to pointing hand when over BPM circle in Manual mode
-    bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
-    auto bpmBounds = tapBpmLabel.getBounds();
-    auto mousePos = event.getPosition();
-
-    if (!trigMode && bpmBounds.contains (mousePos))
-    {
-        setMouseCursor (juce::MouseCursor::PointingHandCursor);
-    }
-    else
-    {
-        setMouseCursor (juce::MouseCursor::NormalCursor);
-    }
+    // Cursor handling now done by tapButton directly
 }
