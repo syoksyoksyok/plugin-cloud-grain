@@ -96,7 +96,7 @@ inline UIColors uiColors;
 namespace UISize
 {
     // Window
-    constexpr int windowMargin = 10;
+    constexpr int windowMargin = 20;
 
     // Knob layout (direct specification)
     constexpr int knobDiameter = 50;
