@@ -1865,6 +1865,25 @@ void CloudLikeGranularProcessor::processSpectralBlock (juce::AudioBuffer<float>&
             wetR[i] = inSampleR * 0.5f;
         }
     }
+
+    // ========== WET signal guarantee (prevents silence at MIX=100%) ==========
+    // Spectral Mad should never be completely silent
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float inSampleL = buffer.getSample(0, i);
+        float inSampleR = buffer.getSample(1, i);
+
+        // Mix 80% processed + 20% input
+        wetL[i] = wetL[i] * 0.8f + inSampleL * 0.2f;
+        wetR[i] = wetR[i] * 0.8f + inSampleR * 0.2f;
+
+        // Fallback: if still silent, use input directly
+        if (std::abs(wetL[i]) < 1e-6f && std::abs(wetR[i]) < 1e-6f)
+        {
+            wetL[i] = inSampleL;
+            wetR[i] = inSampleR;
+        }
+    }
 }
 
 void CloudLikeGranularProcessor::processOliverbBlock (juce::AudioBuffer<float>& buffer, int numSamples,
