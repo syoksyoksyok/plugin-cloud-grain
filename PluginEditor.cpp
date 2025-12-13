@@ -531,9 +531,20 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     bool isManualMode = !trigMode;
 
     // Background color: green when base tempo blinks, otherwise normal colors
+    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (baseTempoLedOn)
     {
-        g.setColour (juce::Colour::fromRGB (100, 180, 100));  // Green (tempo blink)
+        // Outer glow layers (diffuse effect)
+        auto glowColor = juce::Colour::fromRGB (100, 180, 100);
+        for (int i = 4; i >= 1; --i)
+        {
+            float glowExpand = i * 3.0f;
+            float alpha = 0.15f / i;  // Fading alpha for outer layers
+            g.setColour (glowColor.withAlpha (alpha));
+            g.fillEllipse (bpmBounds.expanded (glowExpand));
+        }
+        // Main LED color
+        g.setColour (glowColor);
     }
     else if (isManualMode)
     {
@@ -569,17 +580,31 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     auto ledX = bpmBounds.getRight() + 15.0f;  // LED: Right of BPM circle
     auto ledY = bpmBounds.getCentreY() - ledSize / 2.0f;  // Vertically centered with BPM circle
 
-    // LED: TRIG RATE tempo (red)
-    g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
-    g.fillEllipse (ledX, ledY, ledSize, ledSize);
+    // LED: TRIG RATE tempo (red) with diffuse glow effect
+    auto trigLedBounds = juce::Rectangle<float> (ledX, ledY, ledSize, ledSize);
+
+    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (trigRateLedOn)
     {
-        g.setColour (juce::Colour::fromRGB (180, 100, 100));  // On color (red)
-        auto innerOffset = ledSize * 0.15f;  // Proportional inner circle offset
-        g.fillEllipse (ledX + innerOffset, ledY + innerOffset, ledSize - innerOffset * 2, ledSize - innerOffset * 2);
+        auto glowColor = juce::Colour::fromRGB (180, 100, 100);
+        for (int i = 4; i >= 1; --i)
+        {
+            float glowExpand = i * 3.0f;
+            float alpha = 0.15f / i;  // Fading alpha for outer layers
+            g.setColour (glowColor.withAlpha (alpha));
+            g.fillEllipse (trigLedBounds.expanded (glowExpand));
+        }
+        // Main LED color
+        g.setColour (glowColor);
+        g.fillEllipse (trigLedBounds);
+    }
+    else
+    {
+        g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
+        g.fillEllipse (trigLedBounds);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX, ledY, ledSize, ledSize, 1.5f);  // Thicker border to match BPM circle
+    g.drawEllipse (trigLedBounds, 1.5f);  // Border to match BPM circle
 
     // LED label (below LED)
     g.setColour (uiColors.knobLabel);
