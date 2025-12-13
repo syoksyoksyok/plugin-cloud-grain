@@ -426,8 +426,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     const float bpmFontSize = scaledF (static_cast<float>(UISize::bpmFontSize));
     const float glowScale = scaledF (3.0f);
 
-    // Draw border
-    g.setColour (uiColors.buttonText);
+    // Draw border (same color as MIX knob outline)
+    g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
     g.drawRect (getLocalBounds(), scaled (2));
 
     // Draw separator line above buttons
