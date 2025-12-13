@@ -92,42 +92,51 @@ inline UIColors uiColors;
 
 //==============================================================================
 // Fixed UI Size Configuration (100% scale base values)
+// Direct specification approach - knob size and gaps defined separately
 namespace UISize
 {
-    constexpr int baseWidth  = 640;
-    constexpr int baseHeight = 440;
-
+    // Window
     constexpr int windowMargin = 10;
-    constexpr int knobPadding  = 8;
 
-    constexpr int numColumns = 5;
-    constexpr int numRows = 3;
-    constexpr int knobCellWidth = 124;
-    constexpr int knobRowHeight = 110;
-    constexpr int row3Height = 100;
+    // Knob layout (direct specification)
+    constexpr int knobDiameter = 50;
+    constexpr int knobGap = 32;           // Horizontal gap between knobs
+    constexpr int knobRowGap = 20;        // Vertical gap between rows
+    constexpr int knobLabelHeight = 20;   // Space for label below knob
 
-    constexpr int knobDiameter = 60;
+    // Calculated row height: knob + label space + some padding
+    constexpr int knobRowHeight = knobDiameter + knobLabelHeight + 20;
 
+    // Window size (calculated from layout)
+    // Width: margin + 5 knobs + 4 gaps + margin
+    constexpr int baseWidth  = windowMargin + (knobDiameter * 5) + (knobGap * 4) + windowMargin;  // = 398
+    // Height: margin + 2 rows + row3 + button row + margin
+    constexpr int row3Height = 80;
+    constexpr int buttonRowHeight = 50;
+    constexpr int baseHeight = windowMargin + (knobRowHeight * 2) + row3Height + buttonRowHeight + windowMargin;  // = 330
+
+    // Labels
     constexpr int labelHeight = 18;
     constexpr int labelFontSize = 11;
-    constexpr int knobLabelOffsetY = 25;
 
-    constexpr int buttonWidth = 83;
-    constexpr int buttonHeight = 36;
-    constexpr int buttonRowHeight = 50;
-    constexpr int buttonPadding = 3;
+    // Buttons
+    constexpr int buttonWidth = 70;
+    constexpr int buttonHeight = 30;
+    constexpr int buttonPadding = 4;
 
     // Toggle switch dimensions
-    constexpr int toggleWidth = 120;
-    constexpr int toggleHeight = 28;
-    constexpr int toggleThumbSize = 22;
-    constexpr int toggleTrackHeight = 20;
+    constexpr int toggleWidth = 100;
+    constexpr int toggleHeight = 26;
+    constexpr int toggleThumbSize = 20;
+    constexpr int toggleTrackHeight = 18;
 
-    constexpr int bpmDisplaySize = 40;
+    // BPM/TAP display
+    constexpr int bpmDisplaySize = 36;
     constexpr int bpmFontSize = 10;
 
-    constexpr int ledDiameter = 40;
-    constexpr int ledSpacing = 24;
+    // LED
+    constexpr int ledDiameter = 36;
+    constexpr int ledSpacing = 20;
     constexpr int ledLabelFontSize = 9;
 
     constexpr float scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };

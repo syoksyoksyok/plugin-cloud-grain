@@ -514,68 +514,74 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
 //==============================================================================
 void CloudLikeGranularEditor::resized()
 {
+    // Direct specification approach - use knob size and gap directly
     const int margin = scaled (UISize::windowMargin);
-    const int cellW = scaled (UISize::knobCellWidth);
+    const int knobSize = scaled (UISize::knobDiameter);
+    const int knobGap = scaled (UISize::knobGap);
     const int rowH = scaled (UISize::knobRowHeight);
     const int row3H = scaled (UISize::row3Height);
     const int btnRowH = scaled (UISize::buttonRowHeight);
-    const int knobSize = scaled (UISize::knobDiameter);
     const int labelH = scaled (UISize::labelHeight);
-    const int labelOffsetY = scaled (UISize::knobLabelOffsetY);
     const int btnPadding = scaled (UISize::buttonPadding);
     const int bpmSize = scaled (UISize::bpmDisplaySize);
 
-    auto placeKnobInCell = [&](KnobId id, int cellX, int cellY, int cellRowH = 0)
+    // Knob step = knob size + gap between knobs
+    const int knobStep = knobSize + knobGap;
+
+    // Helper: place knob at column index (0-4) in a row
+    auto placeKnob = [&](KnobId id, int col, int rowY)
     {
-        int effectiveRowH = (cellRowH > 0) ? cellRowH : rowH;
-        int knobX = cellX + (cellW - knobSize) / 2;
-        int knobY = cellY + (effectiveRowH - knobSize - labelH) / 2;
+        int knobX = margin + col * knobStep;
+        int knobY = rowY + 10;  // Small top padding
         knob(id).slider.setBounds (knobX, knobY, knobSize, knobSize);
     };
 
-    auto placeLabelInCell = [&](KnobId id, int cellX, int cellY, int cellRowH = 0)
+    // Helper: place value label below knob
+    auto placeLabel = [&](KnobId id, int col, int rowY)
     {
-        int effectiveRowH = (cellRowH > 0) ? cellRowH : rowH;
-        int labelY = cellY + effectiveRowH - labelOffsetY;
-        valueLabel(id).setBounds (cellX, labelY, cellW, labelH);
+        int labelX = margin + col * knobStep - knobGap / 2;
+        int labelY = rowY + 10 + knobSize + 2;
+        int labelW = knobSize + knobGap;
+        valueLabel(id).setBounds (labelX, labelY, labelW, labelH);
     };
 
-    // Row 1
+    // Row 1: Position, Density, Size, Texture, Pitch
     int row1Y = margin;
-    placeKnobInCell (KnobId::Position, margin + cellW * 0, row1Y);
-    placeKnobInCell (KnobId::Density,  margin + cellW * 1, row1Y);
-    placeKnobInCell (KnobId::Size,     margin + cellW * 2, row1Y);
-    placeKnobInCell (KnobId::Texture,  margin + cellW * 3, row1Y);
-    placeKnobInCell (KnobId::Pitch,    margin + cellW * 4, row1Y);
+    placeKnob (KnobId::Position, 0, row1Y);
+    placeKnob (KnobId::Density,  1, row1Y);
+    placeKnob (KnobId::Size,     2, row1Y);
+    placeKnob (KnobId::Texture,  3, row1Y);
+    placeKnob (KnobId::Pitch,    4, row1Y);
 
-    placeLabelInCell (KnobId::Position, margin + cellW * 0, row1Y);
-    placeLabelInCell (KnobId::Density,  margin + cellW * 1, row1Y);
-    placeLabelInCell (KnobId::Size,     margin + cellW * 2, row1Y);
-    placeLabelInCell (KnobId::Texture,  margin + cellW * 3, row1Y);
-    placeLabelInCell (KnobId::Pitch,    margin + cellW * 4, row1Y);
+    placeLabel (KnobId::Position, 0, row1Y);
+    placeLabel (KnobId::Density,  1, row1Y);
+    placeLabel (KnobId::Size,     2, row1Y);
+    placeLabel (KnobId::Texture,  3, row1Y);
+    placeLabel (KnobId::Pitch,    4, row1Y);
 
-    // Row 2
+    // Row 2: Spread, Feedback, Reverb, Mix, Mode
     int row2Y = margin + rowH;
-    placeKnobInCell (KnobId::Spread,   margin + cellW * 0, row2Y);
-    placeKnobInCell (KnobId::Feedback, margin + cellW * 1, row2Y);
-    placeKnobInCell (KnobId::Reverb,   margin + cellW * 2, row2Y);
-    placeKnobInCell (KnobId::Mix,      margin + cellW * 3, row2Y);
-    placeKnobInCell (KnobId::Mode,     margin + cellW * 4, row2Y);
+    placeKnob (KnobId::Spread,   0, row2Y);
+    placeKnob (KnobId::Feedback, 1, row2Y);
+    placeKnob (KnobId::Reverb,   2, row2Y);
+    placeKnob (KnobId::Mix,      3, row2Y);
+    placeKnob (KnobId::Mode,     4, row2Y);
 
-    placeLabelInCell (KnobId::Spread,   margin + cellW * 0, row2Y);
-    placeLabelInCell (KnobId::Feedback, margin + cellW * 1, row2Y);
-    placeLabelInCell (KnobId::Reverb,   margin + cellW * 2, row2Y);
-    placeLabelInCell (KnobId::Mix,      margin + cellW * 3, row2Y);
-    placeLabelInCell (KnobId::Mode,     margin + cellW * 4, row2Y);
+    placeLabel (KnobId::Spread,   0, row2Y);
+    placeLabel (KnobId::Feedback, 1, row2Y);
+    placeLabel (KnobId::Reverb,   2, row2Y);
+    placeLabel (KnobId::Mix,      3, row2Y);
+    placeLabel (KnobId::Mode,     4, row2Y);
 
-    // Row 3: TRIG Rate
+    // Row 3: TrigRate knob on left
     int row3Y = margin + rowH * 2;
-    placeKnobInCell (KnobId::TrigRate, margin, row3Y, row3H);
-    placeLabelInCell (KnobId::TrigRate, margin, row3Y, row3H);
+    int trigKnobY = row3Y + (row3H - knobSize) / 2;
+    knob(KnobId::TrigRate).slider.setBounds (margin, trigKnobY, knobSize, knobSize);
+    valueLabel(KnobId::TrigRate).setBounds (margin - knobGap / 2, trigKnobY + knobSize + 2, knobSize + knobGap, labelH);
 
-    // BPM/TAP display
-    int bpmAreaX = margin + cellW;
-    int bpmAreaW = cellW * 4;
+    // BPM/TAP display - centered in remaining area
+    int bpmAreaX = margin + knobStep;
+    int bpmAreaW = knobStep * 4 - knobGap;
     int bpmX = bpmAreaX + (bpmAreaW - bpmSize) / 2;
     int bpmY = row3Y + (row3H - bpmSize) / 2;
     tapBpmLabel.setBounds (bpmX, bpmY, bpmSize, bpmSize);
