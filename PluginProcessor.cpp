@@ -2184,10 +2184,7 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
 
             // Combine burst noise and direct input with modal weighting
             float excitation = burstNoise * modeStrength +
-                              ((r & 1) ? inSampleR : inSampleL) * 0.1f;
-
-            // Write excitation to delay line
-            res.delayLine[res.writePos] += excitation;
+                              ((r & 1) ? inSampleR : inSampleL) * 0.3f;
 
             // Apply pitch shift by modulating read position
             float pitchOffset = (1.0f - pitchRatio) * res.delayLine.size() * 0.5f;
@@ -2204,8 +2201,8 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             res.z2 = res.z1;
             res.z1 = filtered;
 
-            // Feedback with decay (comb filter)
-            res.delayLine[res.writePos] = filtered * decay;
+            // Feedback with decay (comb filter) + excitation
+            res.delayLine[res.writePos] = filtered * decay + excitation;
             res.writePos = (res.writePos + 1) & res.delayLineMask;
 
             // === Option 2: Stereo spread with individual panning ===
@@ -2214,7 +2211,7 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
         }
 
         // Normalize by number of active resonators
-        float gain = 0.15f / std::sqrt(static_cast<float>(numActive));
+        float gain = 0.3f / std::sqrt(static_cast<float>(numActive));
 
         wetL[i] = outputL * gain;
         wetR[i] = outputR * gain;
