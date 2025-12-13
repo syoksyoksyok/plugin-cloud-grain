@@ -5,127 +5,40 @@
 CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     : AudioProcessorEditor (&p)
     , processor (p)
-    , ePaperLookAndFeel (std::make_unique<EPaperLookAndFeel>())
+    , lookAndFeel (std::make_unique<EPaperLookAndFeel>())
 {
-    // Set initial size using fixed base dimensions
     setSize (UISize::baseWidth, UISize::baseHeight);
-    startTimerHz (30);  // Update button states at 30Hz
+    startTimerHz (30);
 
-    // Initialize per-knob LookAndFeel instances with their respective colors
-    positionLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    positionLookAndFeel->knobColors = &uiColors.position;
+    // Setup all knobs using array
+    for (int i = 0; i < kNumKnobs; ++i)
+    {
+        setupKnob (static_cast<KnobId>(i), knobNames[i]);
+        setupValueLabel (valueLabels[i]);
+        addAndMakeVisible (valueLabels[i]);
+    }
 
-    densityLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    densityLookAndFeel->knobColors = &uiColors.density;
-
-    sizeLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    sizeLookAndFeel->knobColors = &uiColors.size;
-
-    textureLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    textureLookAndFeel->knobColors = &uiColors.texture;
-
-    pitchLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    pitchLookAndFeel->knobColors = &uiColors.pitch;
-
-    spreadLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    spreadLookAndFeel->knobColors = &uiColors.spread;
-
-    feedbackLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    feedbackLookAndFeel->knobColors = &uiColors.feedback;
-
-    reverbLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    reverbLookAndFeel->knobColors = &uiColors.reverb;
-
-    mixLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    mixLookAndFeel->knobColors = &uiColors.mix;
-
-    modeLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    modeLookAndFeel->knobColors = &uiColors.mode;
-
-    trigRateLookAndFeel = std::make_unique<EPaperLookAndFeel>();
-    trigRateLookAndFeel->knobColors = &uiColors.trigRate;
-
-    // Setup knobs with their individual LookAndFeel instances (all use custom labels)
-    setupKnob (modeKnob, "Mode", modeLookAndFeel.get(), false);
-    setupKnob (positionKnob, "Position", positionLookAndFeel.get(), false);
-    setupKnob (sizeKnob,     "Size",     sizeLookAndFeel.get(), false);
-    setupKnob (pitchKnob,    "Pitch",    pitchLookAndFeel.get(), false);
-    setupKnob (densityKnob,  "Density",  densityLookAndFeel.get(), false);
-    setupKnob (textureKnob,  "Texture",  textureLookAndFeel.get(), false);
-    setupKnob (spreadKnob,   "Spread",   spreadLookAndFeel.get(), false);
-    setupKnob (feedbackKnob, "Feedback", feedbackLookAndFeel.get(), false);
-    setupKnob (reverbKnob,   "Reverb",   reverbLookAndFeel.get(), false);
-    setupKnob (mixKnob,      "Mix",      mixLookAndFeel.get(), false);
-    setupKnob (trigRateKnob, "Trig Rate", trigRateLookAndFeel.get(), false);
-
+    // Setup buttons
     addAndMakeVisible (trigModeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (killDryButton);
     addAndMakeVisible (killWetButton);
-    addAndMakeVisible (modeValueLabel);
-    addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
     addAndMakeVisible (tapButton);
-    addAndMakeVisible (positionValueLabel);
-    addAndMakeVisible (sizeValueLabel);
-    addAndMakeVisible (pitchValueLabel);
-    addAndMakeVisible (densityValueLabel);
-    addAndMakeVisible (textureValueLabel);
-    addAndMakeVisible (spreadValueLabel);
-    addAndMakeVisible (feedbackValueLabel);
-    addAndMakeVisible (reverbValueLabel);
-    addAndMakeVisible (mixValueLabel);
 
-    // Style MODE value label (E-Paper: shows current mode name)
-    modeValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
-    modeValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
-    modeValueLabel.setJustificationType (juce::Justification::centred);
-
-    // Style TRIG RATE value label (E-Paper: shows current division)
-    trigRateValueLabel.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
-    trigRateValueLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
-    trigRateValueLabel.setJustificationType (juce::Justification::centred);
-
-    // Style all knob value labels (E-Paper: shows meaningful values)
-    auto setupValueLabel = [this] (juce::Label& label)
-    {
-        label.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
-        label.setColour (juce::Label::textColourId, uiColors.knobLabel);
-        label.setJustificationType (juce::Justification::centred);
-    };
-
-    setupValueLabel (positionValueLabel);
-    setupValueLabel (sizeValueLabel);
-    setupValueLabel (pitchValueLabel);
-    setupValueLabel (densityValueLabel);
-    setupValueLabel (textureValueLabel);
-    setupValueLabel (spreadValueLabel);
-    setupValueLabel (feedbackValueLabel);
-    setupValueLabel (reverbValueLabel);
-    setupValueLabel (mixValueLabel);
-
-    // Style TRIG Mode toggle button (E-Paper: matte black text)
+    // TrigMode button style
     trigModeButton.setColour (juce::ToggleButton::textColourId, uiColors.buttonText);
-    trigModeButton.setColour (juce::ToggleButton::tickColourId, uiColors.buttonText);
-    trigModeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
-    trigModeButton.setLookAndFeel (ePaperLookAndFeel.get());
+    trigModeButton.setLookAndFeel (lookAndFeel.get());
 
-    // Style Freeze button (E-Paper: matte black text, color changes when ON)
+    // Freeze button style
     freezeButton.setColour (juce::ToggleButton::textColourId, uiColors.freezeTextOff);
-    freezeButton.setColour (juce::ToggleButton::tickColourId, uiColors.buttonText);
-    freezeButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour::fromRGB (160, 160, 160));
-    freezeButton.setLookAndFeel (ePaperLookAndFeel.get());
+    freezeButton.setLookAndFeel (lookAndFeel.get());
 
-    // Style Randomize button (E-Paper: matte black text, off-white background)
+    // Randomize button
     randomButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
-    randomButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     randomButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    randomButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
-    randomButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
-    randomButton.setLookAndFeel (ePaperLookAndFeel.get());
-
-    // Trigger randomize parameter when button is clicked (MIDI/Ableton mappable)
+    randomButton.setLookAndFeel (lookAndFeel.get());
     randomButton.onClick = [this]
     {
         if (auto* param = processor.apvts.getParameter ("randomize"))
@@ -133,67 +46,26 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->beginChangeGesture();
             param->setValueNotifyingHost (1.0f);
             param->endChangeGesture();
-            // Reset parameter back to 0 after a short delay
             param->setValueNotifyingHost (0.0f);
         }
     };
 
-    // Style Kill Dry button (momentary button - ON while pressed)
-    // Parameter is in APVTS so Ableton Configure can map it
-    killDryButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
-    killDryButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
-    killDryButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);
-    killDryButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
-    killDryButton.setLookAndFeel (ePaperLookAndFeel.get());
+    // Kill Dry/Wet buttons (momentary)
+    setupMomentaryButton (killDryButton, "killDry");
+    setupMomentaryButton (killWetButton, "killWet");
 
-    // Kill Dry: Momentary - ON while mouse is down
-    killDryButton.onStateChange = [this]
-    {
-        if (auto* param = processor.apvts.getParameter ("killDry"))
-        {
-            bool isDown = killDryButton.isDown();
-            param->beginChangeGesture();
-            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
-            param->endChangeGesture();
-        }
-    };
-
-    // Style Kill Wet button (momentary button - ON while pressed)
-    killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
-    killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
-    killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);
-    killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
-    killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
-
-    // Kill Wet: Momentary - ON while mouse is down
-    killWetButton.onStateChange = [this]
-    {
-        if (auto* param = processor.apvts.getParameter ("killWet"))
-        {
-            bool isDown = killWetButton.isDown();
-            param->beginChangeGesture();
-            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
-            param->endChangeGesture();
-        }
-    };
-
-    // Style tap BPM label (E-Paper: circular display like a knob)
+    // Tap BPM label
     tapBpmLabel.setFont (juce::Font ("Courier New", 10.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
     tapBpmLabel.setJustificationType (juce::Justification::centred);
     tapBpmLabel.setText ("---", juce::dontSendNotification);
-    tapBpmLabel.setInterceptsMouseClicks (false, false);  // Let tap button receive clicks
+    tapBpmLabel.setInterceptsMouseClicks (false, false);
 
-    // Style tap button (transparent overlay for Manual mode tap trigger)
-    // Parameter is in APVTS so Ableton Configure can map it
-    tapButton.setButtonText ("");  // No text, transparent overlay
+    // Tap button (transparent overlay)
+    tapButton.setButtonText ("");
     tapButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentWhite);
     tapButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentWhite);
     tapButton.setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentWhite);
-
-    // Tap button: Momentary - ON while mouse is down
     tapButton.onStateChange = [this]
     {
         if (auto* param = processor.apvts.getParameter ("tap"))
@@ -205,54 +77,85 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
+    // Create slider attachments
     auto& apvts = processor.apvts;
+    for (int i = 0; i < kNumKnobs; ++i)
+    {
+        sliderAttachments[i] = std::make_unique<SliderAttachment> (apvts, paramIds[i], knobs[i].slider);
+    }
 
-    modeAttachment     = std::make_unique<SliderAttachment> (apvts, "mode",     modeKnob.slider);
-    positionAttachment = std::make_unique<SliderAttachment> (apvts, "position", positionKnob.slider);
-    sizeAttachment     = std::make_unique<SliderAttachment> (apvts, "size",     sizeKnob.slider);
-    pitchAttachment    = std::make_unique<SliderAttachment> (apvts, "pitch",    pitchKnob.slider);
-    densityAttachment  = std::make_unique<SliderAttachment> (apvts, "density",  densityKnob.slider);
-    textureAttachment  = std::make_unique<SliderAttachment> (apvts, "texture",  textureKnob.slider);
-    spreadAttachment   = std::make_unique<SliderAttachment> (apvts, "spread",   spreadKnob.slider);
-    feedbackAttachment = std::make_unique<SliderAttachment> (apvts, "feedback", feedbackKnob.slider);
-    reverbAttachment   = std::make_unique<SliderAttachment> (apvts, "reverb",   reverbKnob.slider);
-    mixAttachment      = std::make_unique<SliderAttachment> (apvts, "mix",      mixKnob.slider);
-    trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
     trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
-    freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
-    // Note: killDry/killWet don't use ButtonAttachment to preserve momentary behavior
-    // Parameters are still in APVTS for Ableton Configure mapping
+    freezeAttachment = std::make_unique<ButtonAttachment> (apvts, "freeze", freezeButton);
 }
 
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
 {
     stopTimer();
 
-    // Clear LookAndFeel references before unique_ptr destruction
-    // This ensures proper cleanup order to prevent dangling pointers
-    modeKnob.slider.setLookAndFeel (nullptr);
-    positionKnob.slider.setLookAndFeel (nullptr);
-    sizeKnob.slider.setLookAndFeel (nullptr);
-    pitchKnob.slider.setLookAndFeel (nullptr);
-    densityKnob.slider.setLookAndFeel (nullptr);
-    textureKnob.slider.setLookAndFeel (nullptr);
-    spreadKnob.slider.setLookAndFeel (nullptr);
-    feedbackKnob.slider.setLookAndFeel (nullptr);
-    reverbKnob.slider.setLookAndFeel (nullptr);
-    mixKnob.slider.setLookAndFeel (nullptr);
-    trigRateKnob.slider.setLookAndFeel (nullptr);
+    // Clear LookAndFeel references
+    for (auto& k : knobs)
+        k.slider.setLookAndFeel (nullptr);
+
     trigModeButton.setLookAndFeel (nullptr);
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
     killDryButton.setLookAndFeel (nullptr);
     killWetButton.setLookAndFeel (nullptr);
-
-    // unique_ptr will automatically clean up ePaperLookAndFeel
 }
 
+//==============================================================================
+// Setup helper functions
+
+void CloudLikeGranularEditor::setupKnob (KnobId id, const juce::String& name)
+{
+    auto& k = knobs[static_cast<int>(id)];
+
+    k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    k.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    k.slider.setLookAndFeel (lookAndFeel.get());
+
+    // Register slider for color lookup
+    lookAndFeel->registerSlider (&k.slider, id);
+
+    k.label.setText (name, juce::dontSendNotification);
+    k.label.attachToComponent (&k.slider, false);
+    k.label.setJustificationType (juce::Justification::centred);
+    k.label.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    k.label.setFont (juce::Font ("Courier New", 12.0f, juce::Font::plain));
+
+    addAndMakeVisible (k.slider);
+    addAndMakeVisible (k.label);
+}
+
+void CloudLikeGranularEditor::setupMomentaryButton (juce::TextButton& button, const juce::String& paramId)
+{
+    button.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    button.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    button.setColour (juce::TextButton::textColourOnId, uiColors.momentaryOnColor);
+    button.setLookAndFeel (lookAndFeel.get());
+
+    button.onStateChange = [this, &button, paramId]
+    {
+        if (auto* param = processor.apvts.getParameter (paramId))
+        {
+            bool isDown = button.isDown();
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
+}
+
+void CloudLikeGranularEditor::setupValueLabel (juce::Label& label)
+{
+    label.setFont (juce::Font ("Courier New", 11.0f, juce::Font::plain));
+    label.setColour (juce::Label::textColourId, uiColors.knobLabel);
+    label.setJustificationType (juce::Justification::centred);
+}
+
+//==============================================================================
 void CloudLikeGranularEditor::timerCallback()
 {
-    // Get current parameter values
     bool trigMode = processor.apvts.getRawParameterValue("trigMode")->load() > 0.5f;
     int mode = static_cast<int>(processor.apvts.getRawParameterValue("mode")->load());
     float trigRate = processor.apvts.getRawParameterValue("trigRate")->load();
@@ -271,20 +174,19 @@ void CloudLikeGranularEditor::timerCallback()
 
     // Update MIX knob indicator position when Kill Dry/Wet is active
     bool needsRepaint = false;
-    if (mixLookAndFeel->forceMaxPosition != killDry)
+    if (lookAndFeel->forceMaxPosition != killDry)
     {
-        mixLookAndFeel->forceMaxPosition = killDry;
+        lookAndFeel->forceMaxPosition = killDry;
         needsRepaint = true;
     }
-    if (mixLookAndFeel->forceMinPosition != killWet)
+    if (lookAndFeel->forceMinPosition != killWet)
     {
-        mixLookAndFeel->forceMinPosition = killWet;
+        lookAndFeel->forceMinPosition = killWet;
         needsRepaint = true;
     }
     if (needsRepaint)
-        mixKnob.slider.repaint();
+        knob(KnobId::Mix).slider.repaint();
 
-    // Update UI components using helper functions
     updateButtonStates(trigMode);
     updateModeLabels(mode);
     updateTrigRateLabel(trigRate);
@@ -293,18 +195,15 @@ void CloudLikeGranularEditor::timerCallback()
     updateBpmDisplay(trigMode);
 }
 
-// ========== REFACTORED: timerCallback helper functions ==========
-
+//==============================================================================
 void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
 {
-    // Update TRIG mode button
     juce::String trigModeText = trigMode ? "Auto" : "Manual";
     if (trigModeButton.getButtonText() != trigModeText)
         trigModeButton.setButtonText(trigModeText);
     if (trigModeButton.getToggleState() != trigMode)
         trigModeButton.setToggleState(trigMode, juce::dontSendNotification);
 
-    // Update freeze button
     bool freezeState = processor.apvts.getRawParameterValue("freeze")->load() > 0.5f;
     if (freezeButton.getToggleState() != freezeState)
     {
@@ -316,36 +215,33 @@ void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
     if (freezeButton.findColour(juce::ToggleButton::textColourId) != freezeTextColor)
         freezeButton.setColour(juce::ToggleButton::textColourId, freezeTextColor);
 
-    // Update Kill Dry/Wet button text colors based on parameter state
-    // (for external control via Ableton Configure MIDI mapping)
+    // Update Kill Dry/Wet button text colors
     bool killDryState = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
     bool killWetState = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
 
-    juce::Colour killDryTextColor = killDryState ? uiColors.position.outline : uiColors.buttonText;
+    juce::Colour killDryTextColor = killDryState ? uiColors.momentaryOnColor : uiColors.buttonText;
     if (killDryButton.findColour(juce::TextButton::textColourOffId) != killDryTextColor)
     {
         killDryButton.setColour(juce::TextButton::textColourOffId, killDryTextColor);
         killDryButton.repaint();
     }
 
-    juce::Colour killWetTextColor = killWetState ? uiColors.position.outline : uiColors.buttonText;
+    juce::Colour killWetTextColor = killWetState ? uiColors.momentaryOnColor : uiColors.buttonText;
     if (killWetButton.findColour(juce::TextButton::textColourOffId) != killWetTextColor)
     {
         killWetButton.setColour(juce::TextButton::textColourOffId, killWetTextColor);
         killWetButton.repaint();
     }
 
-    // Update tap button (only active in Manual mode)
+    // Update tap button visibility
     if (!trigMode)
     {
-        // Manual mode: show tap button with pointing hand cursor
         if (!tapButton.isVisible())
             tapButton.setVisible(true);
         tapButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
     }
     else
     {
-        // Auto mode: hide tap button (BPM display from DAW)
         if (tapButton.isVisible())
             tapButton.setVisible(false);
     }
@@ -353,144 +249,108 @@ void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
 
 void CloudLikeGranularEditor::updateModeLabels(int mode)
 {
-    // Update MODE value label
-    juce::String modeValueText;
-    switch (mode)
-    {
-        case 0: modeValueText = "GranProc"; break;
-        case 1: modeValueText = "Pitch/Time"; break;
-        case 2: modeValueText = "LoopDly"; break;
-        case 3: modeValueText = "SpctrlMad"; break;
-        case 4: modeValueText = "Oliverb"; break;
-        case 5: modeValueText = "Resonstr"; break;
-        case 6: modeValueText = "BeatRpt"; break;
-        case 7: modeValueText = "SpctrlCld"; break;
-        default: modeValueText = "Unknown"; break;
-    }
-    if (modeValueLabel.getText() != modeValueText)
-        modeValueLabel.setText(modeValueText, juce::dontSendNotification);
+    static const char* modeNames[] = {
+        "GranProc", "Pitch/Time", "LoopDly", "SpctrlMad",
+        "Oliverb", "Resonstr", "BeatRpt", "SpctrlCld"
+    };
+
+    juce::String modeValueText = (mode >= 0 && mode < 8) ? modeNames[mode] : "Unknown";
+    if (valueLabel(KnobId::Mode).getText() != modeValueText)
+        valueLabel(KnobId::Mode).setText(modeValueText, juce::dontSendNotification);
 
     // Define knob labels for each mode
-    juce::String posLabel, sizeLabel, pitchLabel, densityLabel, textureLabel;
-    switch (mode)
-    {
-        case 0: posLabel = "Position"; sizeLabel = "Size"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
-        case 1: posLabel = "Position"; sizeLabel = "Window"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
-        case 2: posLabel = "LoopPos"; sizeLabel = "LoopLen"; pitchLabel = "Speed"; densityLabel = "Density"; textureLabel = "Texture"; break;
-        case 3: posLabel = "Delay"; sizeLabel = "Window"; pitchLabel = "FreqShft"; densityLabel = "Density"; textureLabel = "Texture"; break;
-        case 4: posLabel = "ModRate"; sizeLabel = "Decay"; pitchLabel = "Pitch"; densityLabel = "ModDepth"; textureLabel = "Diffuse"; break;
-        case 5: posLabel = "Excite"; sizeLabel = "Decay"; pitchLabel = "Pitch"; densityLabel = "Pattern"; textureLabel = "Bright"; break;
-        case 6: posLabel = "Capture"; sizeLabel = "Length"; pitchLabel = "Speed"; densityLabel = "Rate"; textureLabel = "Stutter"; break;
-        case 7: posLabel = "Filter"; sizeLabel = "Bands"; pitchLabel = "Pitch"; densityLabel = "Smooth"; textureLabel = "Phase"; break;
-        default: posLabel = "Position"; sizeLabel = "Size"; pitchLabel = "Pitch"; densityLabel = "Density"; textureLabel = "Texture"; break;
-    }
+    static const char* posLabels[] = { "Position", "Position", "LoopPos", "Delay", "ModRate", "Excite", "Capture", "Filter" };
+    static const char* sizeLabels[] = { "Size", "Window", "LoopLen", "Window", "Decay", "Decay", "Length", "Bands" };
+    static const char* pitchLabels[] = { "Pitch", "Pitch", "Speed", "FreqShft", "Pitch", "Pitch", "Speed", "Pitch" };
+    static const char* densLabels[] = { "Density", "Density", "Density", "Density", "ModDepth", "Pattern", "Rate", "Smooth" };
+    static const char* texLabels[] = { "Texture", "Texture", "Texture", "Texture", "Diffuse", "Bright", "Stutter", "Phase" };
 
-    if (positionKnob.label.getText() != posLabel) positionKnob.label.setText(posLabel, juce::dontSendNotification);
-    if (sizeKnob.label.getText() != sizeLabel) sizeKnob.label.setText(sizeLabel, juce::dontSendNotification);
-    if (pitchKnob.label.getText() != pitchLabel) pitchKnob.label.setText(pitchLabel, juce::dontSendNotification);
-    if (densityKnob.label.getText() != densityLabel) densityKnob.label.setText(densityLabel, juce::dontSendNotification);
-    if (textureKnob.label.getText() != textureLabel) textureKnob.label.setText(textureLabel, juce::dontSendNotification);
+    int m = (mode >= 0 && mode < 8) ? mode : 0;
+    auto& posKnob = knob(KnobId::Position);
+    auto& sizeKnob = knob(KnobId::Size);
+    auto& pitchKnob = knob(KnobId::Pitch);
+    auto& densKnob = knob(KnobId::Density);
+    auto& texKnob = knob(KnobId::Texture);
+
+    if (posKnob.label.getText() != posLabels[m]) posKnob.label.setText(posLabels[m], juce::dontSendNotification);
+    if (sizeKnob.label.getText() != sizeLabels[m]) sizeKnob.label.setText(sizeLabels[m], juce::dontSendNotification);
+    if (pitchKnob.label.getText() != pitchLabels[m]) pitchKnob.label.setText(pitchLabels[m], juce::dontSendNotification);
+    if (densKnob.label.getText() != densLabels[m]) densKnob.label.setText(densLabels[m], juce::dontSendNotification);
+    if (texKnob.label.getText() != texLabels[m]) texKnob.label.setText(texLabels[m], juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::updateTrigRateLabel(float trigRate)
 {
-    juce::String trigRateValueText;
-    if (trigRate < -3.4f)      trigRateValueText = "1/16";
-    else if (trigRate < -2.8f) trigRateValueText = "1/16T";
-    else if (trigRate < -2.2f) trigRateValueText = "1/8";
-    else if (trigRate < -1.6f) trigRateValueText = "1/8T";
-    else if (trigRate < -0.8f) trigRateValueText = "1/4";
-    else if (trigRate < 0.0f)  trigRateValueText = "1/4T";
-    else if (trigRate < 0.8f)  trigRateValueText = "1/2";
-    else if (trigRate < 1.6f)  trigRateValueText = "1/2T";
-    else if (trigRate < 2.4f)  trigRateValueText = "1bar";
-    else if (trigRate < 3.2f)  trigRateValueText = "1barT";
-    else                       trigRateValueText = "2bars";
+    juce::String trigRateText;
+    if (trigRate < -3.4f)      trigRateText = "1/16";
+    else if (trigRate < -2.8f) trigRateText = "1/16T";
+    else if (trigRate < -2.2f) trigRateText = "1/8";
+    else if (trigRate < -1.6f) trigRateText = "1/8T";
+    else if (trigRate < -0.8f) trigRateText = "1/4";
+    else if (trigRate < 0.0f)  trigRateText = "1/4T";
+    else if (trigRate < 0.8f)  trigRateText = "1/2";
+    else if (trigRate < 1.6f)  trigRateText = "1/2T";
+    else if (trigRate < 2.4f)  trigRateText = "1bar";
+    else if (trigRate < 3.2f)  trigRateText = "1barT";
+    else                       trigRateText = "2bars";
 
-    if (trigRateValueLabel.getText() != trigRateValueText)
-        trigRateValueLabel.setText(trigRateValueText, juce::dontSendNotification);
+    if (valueLabel(KnobId::TrigRate).getText() != trigRateText)
+        valueLabel(KnobId::TrigRate).setText(trigRateText, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::updateKnobValueLabels(int mode, float position, float size, float pitch,
                                                      float density, float texture, float spread,
                                                      float feedback, float reverb, float mix)
 {
-    juce::String posValueText, sizeValueText, pitchValueText, densityValueText, textureValueText;
+    // Position
+    juce::String posText = juce::String(static_cast<int>(position * 100)) + "%";
+    if (mode == 4) posText = juce::String(position * 10.0f, 1) + "Hz";
 
-    switch (mode)
-    {
-        case 0: case 1: case 3:
-            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-        case 2: case 6:
-            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
-            pitchValueText = juce::String(std::pow(2.0f, pitch / 12.0f), 2) + "x";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-        case 4:
-            posValueText = juce::String(position * 10.0f, 1) + "Hz";
-            sizeValueText = juce::String(static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-        case 5:
-            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String(static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-        case 7:
-            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String(4 + static_cast<int>(size * 60.0f));
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-        default:
-            posValueText = juce::String(static_cast<int>(position * 100.0f)) + "%";
-            sizeValueText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
-            pitchValueText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
-            densityValueText = juce::String(static_cast<int>(density * 100.0f)) + "%";
-            textureValueText = juce::String(static_cast<int>(texture * 100.0f)) + "%";
-            break;
-    }
+    // Size
+    juce::String sizeText;
+    if (mode == 7)
+        sizeText = juce::String(4 + static_cast<int>(size * 60));
+    else if (mode == 4 || mode == 5)
+        sizeText = juce::String(static_cast<int>((size - 0.016f) / (1.0f - 0.016f) * 98.0f + 2.0f)) + "%";
+    else
+        sizeText = juce::String(static_cast<int>(size * 1000.0f)) + "ms";
 
-    juce::String spreadValueText = juce::String(static_cast<int>(spread * 100.0f)) + "%";
-    juce::String feedbackValueText = juce::String(static_cast<int>(feedback * 100.0f)) + "%";
-    juce::String reverbValueText = juce::String(static_cast<int>(reverb * 100.0f)) + "%";
+    // Pitch
+    juce::String pitchText;
+    if (mode == 2 || mode == 6)
+        pitchText = juce::String(std::pow(2.0f, pitch / 12.0f), 2) + "x";
+    else
+        pitchText = (pitch >= 0 ? "+" : "") + juce::String(static_cast<int>(pitch)) + "st";
 
-    // Kill Dry/Wet: Show 100% or 0% when button is pressed (Kill Dry takes priority)
+    juce::String densText = juce::String(static_cast<int>(density * 100)) + "%";
+    juce::String texText = juce::String(static_cast<int>(texture * 100)) + "%";
+    juce::String spreadText = juce::String(static_cast<int>(spread * 100)) + "%";
+    juce::String fbText = juce::String(static_cast<int>(feedback * 100)) + "%";
+    juce::String revText = juce::String(static_cast<int>(reverb * 100)) + "%";
+
     bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
     bool killWet = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
-    juce::String mixValueText = killDry ? "100%" : (killWet ? "0%" : juce::String(static_cast<int>(mix * 100.0f)) + "%");
+    juce::String mixText = killDry ? "100%" : (killWet ? "0%" : juce::String(static_cast<int>(mix * 100)) + "%");
 
-    if (positionValueLabel.getText() != posValueText) positionValueLabel.setText(posValueText, juce::dontSendNotification);
-    if (sizeValueLabel.getText() != sizeValueText) sizeValueLabel.setText(sizeValueText, juce::dontSendNotification);
-    if (pitchValueLabel.getText() != pitchValueText) pitchValueLabel.setText(pitchValueText, juce::dontSendNotification);
-    if (densityValueLabel.getText() != densityValueText) densityValueLabel.setText(densityValueText, juce::dontSendNotification);
-    if (textureValueLabel.getText() != textureValueText) textureValueLabel.setText(textureValueText, juce::dontSendNotification);
-    if (spreadValueLabel.getText() != spreadValueText) spreadValueLabel.setText(spreadValueText, juce::dontSendNotification);
-    if (feedbackValueLabel.getText() != feedbackValueText) feedbackValueLabel.setText(feedbackValueText, juce::dontSendNotification);
-    if (reverbValueLabel.getText() != reverbValueText) reverbValueLabel.setText(reverbValueText, juce::dontSendNotification);
-    if (mixValueLabel.getText() != mixValueText) mixValueLabel.setText(mixValueText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Position).getText() != posText) valueLabel(KnobId::Position).setText(posText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Size).getText() != sizeText) valueLabel(KnobId::Size).setText(sizeText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Pitch).getText() != pitchText) valueLabel(KnobId::Pitch).setText(pitchText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Density).getText() != densText) valueLabel(KnobId::Density).setText(densText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Texture).getText() != texText) valueLabel(KnobId::Texture).setText(texText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Spread).getText() != spreadText) valueLabel(KnobId::Spread).setText(spreadText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Feedback).getText() != fbText) valueLabel(KnobId::Feedback).setText(fbText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Reverb).getText() != revText) valueLabel(KnobId::Reverb).setText(revText, juce::dontSendNotification);
+    if (valueLabel(KnobId::Mix).getText() != mixText) valueLabel(KnobId::Mix).setText(mixText, juce::dontSendNotification);
 }
 
 void CloudLikeGranularEditor::updateLedIndicators()
 {
-    // LED 1: Base tempo
+    // Base tempo LED
     if (processor.baseTempoBlink.load())
     {
+        processor.baseTempoBlink.store(false);
         baseTempoLedOn = true;
         ledBlinkDuration = 3;
-        processor.baseTempoBlink.store(false);
         repaint();
     }
     else if (ledBlinkDuration > 0)
@@ -503,17 +363,16 @@ void CloudLikeGranularEditor::updateLedIndicators()
         }
     }
 
-    // LED 2: TRIG RATE tempo / MIDI note
+    // TRIG rate LED
     bool trigMode = processor.apvts.getRawParameterValue("trigMode")->load() > 0.5f;
 
     if (!trigMode)
     {
-        // Manual mode: LED follows MIDI note held state
         bool noteHeld = processor.midiNoteHeld.load();
         if (processor.trigRateBlink.load())
         {
-            trigRateLedOn = true;
             processor.trigRateBlink.store(false);
+            trigRateLedOn = true;
             repaint();
         }
         else if (!noteHeld && trigRateLedOn)
@@ -524,12 +383,11 @@ void CloudLikeGranularEditor::updateLedIndicators()
     }
     else
     {
-        // Auto mode: standard blink behavior
         if (processor.trigRateBlink.load())
         {
+            processor.trigRateBlink.store(false);
             trigRateLedOn = true;
             ledBlinkDuration2 = 3;
-            processor.trigRateBlink.store(false);
             repaint();
         }
         else if (ledBlinkDuration2 > 0)
@@ -546,60 +404,26 @@ void CloudLikeGranularEditor::updateLedIndicators()
 
 void CloudLikeGranularEditor::updateBpmDisplay(bool trigMode)
 {
-    // Manual mode: show "---" (no BPM display)
-    // Auto mode: show host BPM
     juce::String bpmText = "---";
     if (trigMode)
     {
-        float displayBPM = processor.hostBPM.load();
-        if (displayBPM > 0.0f)
-            bpmText = juce::String(static_cast<int>(displayBPM));
+        float hostBpm = processor.hostBPM.load();
+        if (hostBpm > 0.0f)
+            bpmText = juce::String(static_cast<int>(hostBpm));
     }
     if (tapBpmLabel.getText() != bpmText)
         tapBpmLabel.setText(bpmText, juce::dontSendNotification);
 }
 
-void CloudLikeGranularEditor::setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox)
-{
-    addAndMakeVisible (k.slider);
-    addAndMakeVisible (k.label);
-
-    k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    if (showTextBox)
-        k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 22);
-    else
-        k.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    k.slider.setPopupDisplayEnabled (false, false, this);
-
-    // Use JUCE default rotary parameters (no explicit setRotaryParameters call)
-    // This should give standard knob behavior: left-bottom = min, right-bottom = max
-
-    // Apply E-Paper LookAndFeel (with per-knob colors)
-    k.slider.setLookAndFeel (lookAndFeel);
-
-    // E-Paper styling for text box and label
-    k.slider.setColour (juce::Slider::textBoxTextColourId, uiColors.knobLabel);
-    k.slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-    k.slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-
-    k.label.setText (name, juce::dontSendNotification);
-    k.label.attachToComponent (&k.slider, false);
-    k.label.setJustificationType (juce::Justification::centred);
-    k.label.setColour (juce::Label::textColourId, uiColors.knobLabel);
-    k.label.setFont (juce::Font ("Courier New", 12.0f, juce::Font::plain));
-}
-
+//==============================================================================
 void CloudLikeGranularEditor::paint (juce::Graphics& g)
 {
-    // E-Paper UI: Background
     g.fillAll (uiColors.background);
 
-    // Scaled values for paint
     const int margin = scaled (UISize::windowMargin);
-    const float ledLabelFontSize = scaledF (static_cast<float> (UISize::ledLabelFontSize));
-    const float bpmFontSize = scaledF (static_cast<float> (UISize::bpmFontSize));
+    const float ledLabelFontSize = scaledF (static_cast<float>(UISize::ledLabelFontSize));
+    const float bpmFontSize = scaledF (static_cast<float>(UISize::bpmFontSize));
     const float glowScale = scaledF (3.0f);
-    const float borderScale = scaledF (1.0f);
 
     // Draw border
     g.setColour (uiColors.buttonText);
@@ -610,104 +434,85 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colour::fromRGB (224, 224, 224));
     g.fillRect (margin, separatorY, getWidth() - margin * 2, scaled (1));
 
-    // Draw subtle border around Freeze button when active (E-Paper style)
+    // Draw freeze button border when active
     if (freezeButton.getToggleState())
     {
-        auto freezeBounds = freezeButton.getBounds().toFloat().reduced (borderScale);
+        auto freezeBounds = freezeButton.getBounds().toFloat().reduced (scaledF (1.0f));
         g.setColour (uiColors.buttonText);
         g.drawRoundedRectangle (freezeBounds, 0.0f, scaledF (2.0f));
     }
 
-    // Draw circular background for tap BPM label (knob-style display)
+    // Draw BPM/TAP display
     auto bpmBounds = tapBpmLabel.getBounds().toFloat();
-
-    // Check if Manual mode (clickable)
     bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
     bool isManualMode = !trigMode;
 
-    // Background color: green when base tempo blinks, otherwise normal colors
-    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (baseTempoLedOn)
     {
-        // Outer glow layers (diffuse effect)
         auto glowColor = juce::Colour::fromRGB (100, 180, 100);
         for (int i = 4; i >= 1; --i)
         {
-            float glowExpand = i * glowScale;
-            float alpha = 0.15f / i;  // Fading alpha for outer layers
-            g.setColour (glowColor.withAlpha (alpha));
-            g.fillEllipse (bpmBounds.expanded (glowExpand));
+            g.setColour (glowColor.withAlpha (0.15f / i));
+            g.fillEllipse (bpmBounds.expanded (i * glowScale));
         }
-        // Main LED color
         g.setColour (glowColor);
     }
     else if (isManualMode)
     {
-        g.setColour (juce::Colour::fromRGB (250, 250, 250));  // Almost white (clickable)
+        g.setColour (juce::Colour::fromRGB (250, 250, 250));
     }
     else
     {
-        g.setColour (juce::Colour::fromRGB (230, 230, 230));  // Darker gray (disabled)
+        g.setColour (juce::Colour::fromRGB (230, 230, 230));
     }
     g.fillEllipse (bpmBounds);
 
-    // Border: thinner line, color matches MIX knob outline
-    g.setColour (uiColors.mix.outline);
-    float borderThickness = isManualMode ? scaledF (1.25f) : scaledF (0.75f);
-    g.drawEllipse (bpmBounds, borderThickness);
+    g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
+    g.drawEllipse (bpmBounds, isManualMode ? scaledF (1.25f) : scaledF (0.75f));
 
-    // Draw label below the circle: "TAP" in Manual mode, "BPM" in Auto mode
+    // BPM/TAP label
     auto bpmLabelArea = bpmBounds.withY (bpmBounds.getBottom() + scaledF (2.0f)).withHeight (scaledF (15.0f));
     g.setFont (juce::Font ("Courier New", bpmFontSize, juce::Font::plain));
     g.setColour (uiColors.knobLabel);
     g.drawText (isManualMode ? "TAP" : "BPM", bpmLabelArea, juce::Justification::centred);
 
-    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle
-    float ledSize = scaledF (static_cast<float> (UISize::ledDiameter));
-    float ledSpacing = scaledF (static_cast<float> (UISize::ledSpacing));
+    // Draw TRIG LED
+    float ledSize = scaledF (static_cast<float>(UISize::ledDiameter));
+    float ledSpacing = scaledF (static_cast<float>(UISize::ledSpacing));
     float ledX = bpmBounds.getRight() + ledSpacing;
     float ledY = bpmBounds.getCentreY() - ledSize / 2.0f;
-
-    // LED: TRIG RATE tempo (red) with diffuse glow effect
     auto trigLedBounds = juce::Rectangle<float> (ledX, ledY, ledSize, ledSize);
 
-    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (trigRateLedOn)
     {
         auto glowColor = juce::Colour::fromRGB (180, 100, 100);
         for (int i = 4; i >= 1; --i)
         {
-            float glowExpand = i * glowScale;
-            float alpha = 0.15f / i;  // Fading alpha for outer layers
-            g.setColour (glowColor.withAlpha (alpha));
-            g.fillEllipse (trigLedBounds.expanded (glowExpand));
+            g.setColour (glowColor.withAlpha (0.15f / i));
+            g.fillEllipse (trigLedBounds.expanded (i * glowScale));
         }
-        // Main LED color
         g.setColour (glowColor);
-        g.fillEllipse (trigLedBounds);
     }
     else
     {
-        g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
-        g.fillEllipse (trigLedBounds);
+        g.setColour (juce::Colour::fromRGB (200, 200, 200));
     }
-    g.setColour (uiColors.mix.outline);  // Same color as BPM LED border
+    g.fillEllipse (trigLedBounds);
+
+    g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
     g.drawEllipse (trigLedBounds, scaledF (0.75f));
 
-    // LED label (below LED)
+    // TRIG label
     g.setColour (uiColors.knobLabel);
     g.setFont (juce::Font ("Courier New", ledLabelFontSize, juce::Font::plain));
-    int labelWidth = static_cast<int> (ledSize + scaledF (16.0f));
-    int labelX = static_cast<int> (ledX - scaledF (8.0f));
-    int labelY = static_cast<int> (ledY + ledSize + scaledF (2.0f));
-    g.drawText ("TRIG", labelX, labelY, labelWidth, scaled (12), juce::Justification::centred);
+    int labelX = static_cast<int>(ledX - scaledF (8.0f));
+    int labelY = static_cast<int>(ledY + ledSize + scaledF (2.0f));
+    g.drawText ("TRIG", labelX, labelY, static_cast<int>(ledSize + scaledF (16.0f)), scaled (12), juce::Justification::centred);
 }
 
+//==============================================================================
 void CloudLikeGranularEditor::resized()
 {
-    // ===== Fixed Layout with Scaling Support =====
-    // All sizes are based on UISize constants, multiplied by uiScale
-
     const int margin = scaled (UISize::windowMargin);
     const int cellW = scaled (UISize::knobCellWidth);
     const int rowH = scaled (UISize::knobRowHeight);
@@ -719,77 +524,69 @@ void CloudLikeGranularEditor::resized()
     const int btnPadding = scaled (UISize::buttonPadding);
     const int bpmSize = scaled (UISize::bpmDisplaySize);
 
-    // Helper to center a knob within a cell
-    auto placeKnobInCell = [&] (Knob& k, int cellX, int cellY)
+    auto placeKnobInCell = [&](KnobId id, int cellX, int cellY, int cellRowH = 0)
     {
+        int effectiveRowH = (cellRowH > 0) ? cellRowH : rowH;
         int knobX = cellX + (cellW - knobSize) / 2;
-        int knobY = cellY + (rowH - knobSize - labelH) / 2;
-        k.slider.setBounds (knobX, knobY, knobSize, knobSize);
+        int knobY = cellY + (effectiveRowH - knobSize - labelH) / 2;
+        knob(id).slider.setBounds (knobX, knobY, knobSize, knobSize);
     };
 
-    // Helper to place value label below knob
-    auto placeLabelInCell = [&] (juce::Label& label, int cellX, int cellY)
+    auto placeLabelInCell = [&](KnobId id, int cellX, int cellY, int cellRowH = 0)
     {
-        int labelY = cellY + rowH - labelOffsetY;
-        label.setBounds (cellX, labelY, cellW, labelH);
+        int effectiveRowH = (cellRowH > 0) ? cellRowH : rowH;
+        int labelY = cellY + effectiveRowH - labelOffsetY;
+        valueLabel(id).setBounds (cellX, labelY, cellW, labelH);
     };
 
-    // ===== Row 1: Position, Density, Size, Texture, Pitch =====
+    // Row 1
     int row1Y = margin;
-    placeKnobInCell (positionKnob, margin + cellW * 0, row1Y);
-    placeKnobInCell (densityKnob,  margin + cellW * 1, row1Y);
-    placeKnobInCell (sizeKnob,     margin + cellW * 2, row1Y);
-    placeKnobInCell (textureKnob,  margin + cellW * 3, row1Y);
-    placeKnobInCell (pitchKnob,    margin + cellW * 4, row1Y);
+    placeKnobInCell (KnobId::Position, margin + cellW * 0, row1Y);
+    placeKnobInCell (KnobId::Density,  margin + cellW * 1, row1Y);
+    placeKnobInCell (KnobId::Size,     margin + cellW * 2, row1Y);
+    placeKnobInCell (KnobId::Texture,  margin + cellW * 3, row1Y);
+    placeKnobInCell (KnobId::Pitch,    margin + cellW * 4, row1Y);
 
-    placeLabelInCell (positionValueLabel, margin + cellW * 0, row1Y);
-    placeLabelInCell (densityValueLabel,  margin + cellW * 1, row1Y);
-    placeLabelInCell (sizeValueLabel,     margin + cellW * 2, row1Y);
-    placeLabelInCell (textureValueLabel,  margin + cellW * 3, row1Y);
-    placeLabelInCell (pitchValueLabel,    margin + cellW * 4, row1Y);
+    placeLabelInCell (KnobId::Position, margin + cellW * 0, row1Y);
+    placeLabelInCell (KnobId::Density,  margin + cellW * 1, row1Y);
+    placeLabelInCell (KnobId::Size,     margin + cellW * 2, row1Y);
+    placeLabelInCell (KnobId::Texture,  margin + cellW * 3, row1Y);
+    placeLabelInCell (KnobId::Pitch,    margin + cellW * 4, row1Y);
 
-    // ===== Row 2: Spread, Feedback, Reverb, Mix, Mode =====
+    // Row 2
     int row2Y = margin + rowH;
-    placeKnobInCell (spreadKnob,   margin + cellW * 0, row2Y);
-    placeKnobInCell (feedbackKnob, margin + cellW * 1, row2Y);
-    placeKnobInCell (reverbKnob,   margin + cellW * 2, row2Y);
-    placeKnobInCell (mixKnob,      margin + cellW * 3, row2Y);
-    placeKnobInCell (modeKnob,     margin + cellW * 4, row2Y);
+    placeKnobInCell (KnobId::Spread,   margin + cellW * 0, row2Y);
+    placeKnobInCell (KnobId::Feedback, margin + cellW * 1, row2Y);
+    placeKnobInCell (KnobId::Reverb,   margin + cellW * 2, row2Y);
+    placeKnobInCell (KnobId::Mix,      margin + cellW * 3, row2Y);
+    placeKnobInCell (KnobId::Mode,     margin + cellW * 4, row2Y);
 
-    placeLabelInCell (spreadValueLabel,   margin + cellW * 0, row2Y);
-    placeLabelInCell (feedbackValueLabel, margin + cellW * 1, row2Y);
-    placeLabelInCell (reverbValueLabel,   margin + cellW * 2, row2Y);
-    placeLabelInCell (mixValueLabel,      margin + cellW * 3, row2Y);
-    placeLabelInCell (modeValueLabel,     margin + cellW * 4, row2Y);
+    placeLabelInCell (KnobId::Spread,   margin + cellW * 0, row2Y);
+    placeLabelInCell (KnobId::Feedback, margin + cellW * 1, row2Y);
+    placeLabelInCell (KnobId::Reverb,   margin + cellW * 2, row2Y);
+    placeLabelInCell (KnobId::Mix,      margin + cellW * 3, row2Y);
+    placeLabelInCell (KnobId::Mode,     margin + cellW * 4, row2Y);
 
-    // ===== Row 3: TRIG Rate (left), BPM/TAP display (center) =====
+    // Row 3: TRIG Rate
     int row3Y = margin + rowH * 2;
+    placeKnobInCell (KnobId::TrigRate, margin, row3Y, row3H);
+    placeLabelInCell (KnobId::TrigRate, margin, row3Y, row3H);
 
-    // TRIG Rate knob (first cell)
-    int trigRateKnobX = margin + (cellW - knobSize) / 2;
-    int trigRateKnobY = row3Y + (row3H - knobSize - labelH) / 2;
-    trigRateKnob.slider.setBounds (trigRateKnobX, trigRateKnobY, knobSize, knobSize);
-
-    // TRIG Rate label
-    int trigRateLabelY = row3Y + row3H - labelOffsetY;
-    trigRateValueLabel.setBounds (margin, trigRateLabelY, cellW, labelH);
-
-    // BPM/TAP display (centered in remaining area)
-    int bpmAreaX = margin + cellW;  // After first column
-    int bpmAreaW = cellW * 4;       // Remaining 4 columns
+    // BPM/TAP display
+    int bpmAreaX = margin + cellW;
+    int bpmAreaW = cellW * 4;
     int bpmX = bpmAreaX + (bpmAreaW - bpmSize) / 2;
     int bpmY = row3Y + (row3H - bpmSize) / 2;
     tapBpmLabel.setBounds (bpmX, bpmY, bpmSize, bpmSize);
     tapButton.setBounds (bpmX, bpmY, bpmSize, bpmSize);
 
-    // ===== Button Row =====
+    // Button row
     int btnRowY = margin + rowH * 2 + row3H;
     int btnW = scaled (UISize::buttonWidth);
     int btnH = scaled (UISize::buttonHeight);
     int btnY = btnRowY + (btnRowH - btnH) / 2;
 
-    // Center all 5 buttons horizontally
-    int totalBtnWidth = btnW * 5 + btnPadding * 8;  // 5 buttons + padding between
+    int totalBtnWidth = btnW * 5 + btnPadding * 8;
     int btnStartX = (scaled (UISize::baseWidth) - totalBtnWidth) / 2;
     int btnSpacing = btnW + btnPadding * 2;
 
@@ -800,14 +597,13 @@ void CloudLikeGranularEditor::resized()
     killWetButton.setBounds  (btnStartX + btnSpacing * 4, btnY, btnW, btnH);
 }
 
-void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& /*event*/)
+//==============================================================================
+void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent&)
 {
-    // Tap functionality now handled by tapButton
 }
 
 void CloudLikeGranularEditor::mouseUp (const juce::MouseEvent& event)
 {
-    // Right-click shows scale selection menu
     if (event.mods.isPopupMenu())
     {
         juce::PopupMenu menu;
@@ -816,41 +612,30 @@ void CloudLikeGranularEditor::mouseUp (const juce::MouseEvent& event)
         for (int i = 0; i < UISize::numScales; ++i)
         {
             float scale = UISize::scales[i];
-            int percent = static_cast<int> (scale * 100);
-            juce::String label = juce::String (percent) + "%";
-
-            bool isTicked = (std::abs (uiScale - scale) < 0.01f);
-            menu.addItem (i + 1, label, true, isTicked);
+            int percent = static_cast<int>(scale * 100);
+            bool isTicked = (std::abs(uiScale - scale) < 0.01f);
+            menu.addItem (i + 1, juce::String(percent) + "%", true, isTicked);
         }
 
         menu.showMenuAsync (juce::PopupMenu::Options(),
-            [this] (int result)
+            [this](int result)
             {
                 if (result > 0 && result <= UISize::numScales)
-                {
                     setScale (UISize::scales[result - 1]);
-                }
             });
     }
 }
 
-void CloudLikeGranularEditor::mouseMove (const juce::MouseEvent& /*event*/)
+void CloudLikeGranularEditor::mouseMove (const juce::MouseEvent&)
 {
-    // Cursor handling now done by tapButton directly
 }
 
 void CloudLikeGranularEditor::setScale (float newScale)
 {
-    if (std::abs (uiScale - newScale) < 0.01f)
-        return;  // No change
+    if (std::abs(uiScale - newScale) < 0.01f)
+        return;
 
     uiScale = newScale;
-
-    // Resize window
-    int newWidth = scaled (UISize::baseWidth);
-    int newHeight = scaled (UISize::baseHeight);
-    setSize (newWidth, newHeight);
-
-    // resized() will be called automatically after setSize()
+    setSize (scaled (UISize::baseWidth), scaled (UISize::baseHeight));
     repaint();
 }
