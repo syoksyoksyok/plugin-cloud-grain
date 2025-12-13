@@ -87,11 +87,11 @@ namespace UISize
     constexpr int buttonPadding = 3;
 
     // BPM/TAP display
-    constexpr int bpmDisplaySize = 45;
+    constexpr int bpmDisplaySize = 40;
     constexpr int bpmFontSize = 10;
 
     // LEDs
-    constexpr int ledDiameter = 12;
+    constexpr int ledDiameter = 40;
     constexpr int ledSpacing = 24;
     constexpr int ledLabelFontSize = 9;
 
