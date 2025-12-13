@@ -234,6 +234,19 @@ public:
         g.drawRect (bounds, 1.0f);
     }
 
+    void drawButtonText (juce::Graphics& g, juce::TextButton& button,
+                        bool, bool) override
+    {
+        auto bounds = button.getLocalBounds().toFloat();
+        auto fontSize = juce::jmin (15.0f, button.getHeight() * 0.4f);
+
+        g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
+        g.setColour (button.findColour (button.getToggleState()
+            ? juce::TextButton::textColourOnId
+            : juce::TextButton::textColourOffId));
+        g.drawText (button.getButtonText(), bounds, juce::Justification::centred, true);
+    }
+
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
                           bool, bool shouldDrawButtonAsDown) override
     {
