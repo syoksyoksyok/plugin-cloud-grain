@@ -47,8 +47,9 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     // LED indicators for tempo visualization (public for UI access)
-    std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo or MIDI triggers
-    std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo
+    std::atomic<bool> baseTempoBlink { false };  // LED 1: Blinks at base tempo (Auto mode only)
+    std::atomic<bool> trigRateBlink { false };   // LED 2: Blinks at TRIG RATE tempo or MIDI
+    std::atomic<bool> midiNoteHeld { false };    // True while MIDI note is held (Manual mode)
 
     // TRIG system state (public for UI access)
     std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs

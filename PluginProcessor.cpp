@@ -653,66 +653,26 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     if (!trigMode)  // Manual/MIDI mode
     {
-        // In Manual mode: LED 1 = MIDI triggers, LED 2 = TRIG RATE tempo
+        // In Manual mode:
+        // - BPM LED: No blinking (disabled)
+        // - TRIG LED: Blinks on MIDI note (follows note length) or tap tempo click
 
-        // LED 2: TRIG RATE tempo in Manual mode (same calculation as Auto mode)
-        auto playHead = getPlayHead();
-        if (playHead != nullptr)
-        {
-            juce::Optional<juce::AudioPlayHead::PositionInfo> posInfo = playHead->getPosition();
-            if (posInfo.hasValue() && posInfo->getBpm().hasValue())
-            {
-                double bpm = *posInfo->getBpm();
-                float trigRate = apvts.getRawParameterValue ("trigRate")->load();
-                double noteValue = calculateNoteValueFromTrigRate(trigRate);
-
-                double beatsPerSecond = bpm / 60.0;
-                double triggersPerSecond = beatsPerSecond / (noteValue * 4.0);
-                double phaseIncrement = triggersPerSecond / currentSampleRate;
-
-                for (int i = 0; i < numSamples; ++i)
-                {
-                    tempoSyncPhase += phaseIncrement;
-                    if (tempoSyncPhase >= 1.0)
-                    {
-                        tempoSyncPhase -= 1.0;
-                        trigRateBlink.store(true);  // LED 2: TRIG RATE tempo in Manual mode
-                    }
-                }
-            }
-        }
-
-        // Process MIDI triggers - trigger on every Note On
+        // Process MIDI triggers - Note On/Off for LED and trigger
         for (const auto metadata : midi)
         {
             auto message = metadata.getMessage();
 
-            // Trigger on every Note On (velocity > 0)
+            // Note On: trigger and turn on LED
             if (message.isNoteOn() && message.getVelocity() > 0)
             {
                 triggerReceived.store(true);
-                baseTempoBlink.store(true);  // LED: MIDI trigger indicator
+                trigRateBlink.store(true);   // TRIG LED on
+                midiNoteHeld.store(true);    // Track note held state
             }
-        }
-
-        // LED 1: Tap tempo blink (if tap tempo is active)
-        if (tapTempoActive.load())
-        {
-            float tapBPM = detectedTapBPM.load();
-            if (tapBPM > 0.0f)
+            // Note Off: turn off LED
+            else if (message.isNoteOff() || (message.isNoteOn() && message.getVelocity() == 0))
             {
-                double beatsPerSecond = tapBPM / 60.0;
-                double phaseIncrement = beatsPerSecond / currentSampleRate;
-
-                for (int i = 0; i < numSamples; ++i)
-                {
-                    tapTempoPhase += phaseIncrement;
-                    if (tapTempoPhase >= 1.0)
-                    {
-                        tapTempoPhase -= 1.0;
-                        baseTempoBlink.store(true);  // LED 1: Tap tempo blink
-                    }
-                }
+                midiNoteHeld.store(false);   // Note released
             }
         }
     }

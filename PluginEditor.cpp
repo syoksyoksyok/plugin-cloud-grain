@@ -445,21 +445,43 @@ void CloudLikeGranularEditor::updateLedIndicators()
         }
     }
 
-    // LED 2: TRIG RATE tempo
-    if (processor.trigRateBlink.load())
+    // LED 2: TRIG RATE tempo / MIDI note
+    bool trigMode = processor.apvts.getRawParameterValue("trigMode")->load() > 0.5f;
+
+    if (!trigMode)
     {
-        trigRateLedOn = true;
-        ledBlinkDuration2 = 3;
-        processor.trigRateBlink.store(false);
-        repaint();
-    }
-    else if (ledBlinkDuration2 > 0)
-    {
-        ledBlinkDuration2--;
-        if (ledBlinkDuration2 == 0)
+        // Manual mode: LED follows MIDI note held state
+        bool noteHeld = processor.midiNoteHeld.load();
+        if (processor.trigRateBlink.load())
+        {
+            trigRateLedOn = true;
+            processor.trigRateBlink.store(false);
+            repaint();
+        }
+        else if (!noteHeld && trigRateLedOn)
         {
             trigRateLedOn = false;
             repaint();
+        }
+    }
+    else
+    {
+        // Auto mode: standard blink behavior
+        if (processor.trigRateBlink.load())
+        {
+            trigRateLedOn = true;
+            ledBlinkDuration2 = 3;
+            processor.trigRateBlink.store(false);
+            repaint();
+        }
+        else if (ledBlinkDuration2 > 0)
+        {
+            ledBlinkDuration2--;
+            if (ledBlinkDuration2 == 0)
+            {
+                trigRateLedOn = false;
+                repaint();
+            }
         }
     }
 }
@@ -726,7 +748,7 @@ void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
     {
         // Trigger event
         processor.triggerReceived.store (true);
-        processor.baseTempoBlink.store (true);  // LED 1 blink
+        processor.trigRateBlink.store (true);  // TRIG LED blink (Manual mode)
 
         // Tap tempo detection
         double currentTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
