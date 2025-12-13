@@ -257,8 +257,6 @@ private:
     std::unique_ptr<SliderAttachment> trigRateAttachment;
     std::unique_ptr<ButtonAttachment> trigModeAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
-    std::unique_ptr<ButtonAttachment> killDryAttachment;
-    std::unique_ptr<ButtonAttachment> killWetAttachment;
 
     void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox = true);
 
