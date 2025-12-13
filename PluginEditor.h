@@ -93,6 +93,7 @@ inline UIColors uiColors;
 //==============================================================================
 // Fixed UI Size Configuration (100% scale base values)
 // Direct specification approach - knob size and gaps defined separately
+// Layout: 4 knobs per row, compact buttons
 namespace UISize
 {
     // Window
@@ -103,33 +104,32 @@ namespace UISize
     constexpr int knobGap = 32;           // Horizontal gap between knobs
     constexpr int knobRowGap = 20;        // Vertical gap between rows
     constexpr int knobLabelHeight = 20;   // Space for label below knob
+    constexpr int knobsPerRow = 4;        // 4 knobs per row
 
     // Calculated row height: knob + label space + some padding
     constexpr int knobRowHeight = knobDiameter + knobLabelHeight + 20;
 
-    // Buttons
-    constexpr int buttonWidth = 70;
+    // Buttons (compact size for single row)
+    constexpr int buttonWidth = 55;       // Reduced from 70
+    constexpr int buttonWidthSmall = 38;  // For "Rnd" button
     constexpr int buttonHeight = 30;
     constexpr int buttonPadding = 4;
 
-    // Toggle switch dimensions
-    constexpr int toggleWidth = 100;
+    // Toggle switch dimensions (slightly smaller)
+    constexpr int toggleWidth = 90;       // Reduced from 100
     constexpr int toggleHeight = 26;
     constexpr int toggleThumbSize = 20;
     constexpr int toggleTrackHeight = 18;
 
     // Window size (calculated from layout)
-    // Knob row width: 5 knobs + 4 gaps = 378px
-    constexpr int knobRowWidth = (knobDiameter * 5) + (knobGap * 4);
-    // Button row width: toggle + 4 buttons + padding = 412px
-    constexpr int buttonRowTotalWidth = toggleWidth + (buttonWidth * 4) + (buttonPadding * 8);
-    // Base width on knob row for symmetric margins (34px left + 378px knobs + 34px right = 446px)
-    constexpr int baseWidth = windowMargin * 2 + knobRowWidth;  // = 446
+    // Knob row width: 4 knobs + 3 gaps = 296px
+    constexpr int knobRowWidth = (knobDiameter * knobsPerRow) + (knobGap * (knobsPerRow - 1));
+    // Base width on knob row for symmetric margins (34px left + 296px knobs + 34px right = 364px)
+    constexpr int baseWidth = windowMargin * 2 + knobRowWidth;  // = 364
 
-    // Height: margin + 2 rows + row3 + button row + margin
-    constexpr int row3Height = 80;
+    // Height: margin + 3 knob rows + button row + margin
     constexpr int buttonRowHeight = 50;
-    constexpr int baseHeight = windowMargin + (knobRowHeight * 2) + row3Height + buttonRowHeight + windowMargin;  // = 330
+    constexpr int baseHeight = windowMargin + (knobRowHeight * 3) + buttonRowHeight + windowMargin;  // = 388
 
     // Labels
     constexpr int labelHeight = 18;

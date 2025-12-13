@@ -515,11 +515,11 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
 void CloudLikeGranularEditor::resized()
 {
     // Direct specification approach - use knob size and gap directly
+    // Layout: 4 knobs per row, compact buttons
     const int margin = scaled (UISize::windowMargin);
     const int knobSize = scaled (UISize::knobDiameter);
     const int knobGap = scaled (UISize::knobGap);
     const int rowH = scaled (UISize::knobRowHeight);
-    const int row3H = scaled (UISize::row3Height);
     const int btnRowH = scaled (UISize::buttonRowHeight);
     const int labelH = scaled (UISize::labelHeight);
     const int btnPadding = scaled (UISize::buttonPadding);
@@ -528,7 +528,7 @@ void CloudLikeGranularEditor::resized()
     // Knob step = knob size + gap between knobs
     const int knobStep = knobSize + knobGap;
 
-    // Helper: place knob at column index (0-4) in a row
+    // Helper: place knob at column index (0-3) in a row
     auto placeKnob = [&](KnobId id, int col, int rowY)
     {
         int knobX = margin + col * knobStep;
@@ -545,51 +545,50 @@ void CloudLikeGranularEditor::resized()
         valueLabel(id).setBounds (labelX, labelY, labelW, labelH);
     };
 
-    // Row 1: Position, Density, Size, Texture, Pitch
+    // Row 1: Position, Density, Size, Texture (4 knobs)
     int row1Y = margin;
     placeKnob (KnobId::Position, 0, row1Y);
     placeKnob (KnobId::Density,  1, row1Y);
     placeKnob (KnobId::Size,     2, row1Y);
     placeKnob (KnobId::Texture,  3, row1Y);
-    placeKnob (KnobId::Pitch,    4, row1Y);
 
     placeLabel (KnobId::Position, 0, row1Y);
     placeLabel (KnobId::Density,  1, row1Y);
     placeLabel (KnobId::Size,     2, row1Y);
     placeLabel (KnobId::Texture,  3, row1Y);
-    placeLabel (KnobId::Pitch,    4, row1Y);
 
-    // Row 2: Spread, Feedback, Reverb, Mix, Mode
+    // Row 2: Pitch, Spread, Feedback, Reverb (4 knobs)
     int row2Y = margin + rowH;
-    placeKnob (KnobId::Spread,   0, row2Y);
-    placeKnob (KnobId::Feedback, 1, row2Y);
-    placeKnob (KnobId::Reverb,   2, row2Y);
-    placeKnob (KnobId::Mix,      3, row2Y);
-    placeKnob (KnobId::Mode,     4, row2Y);
+    placeKnob (KnobId::Pitch,    0, row2Y);
+    placeKnob (KnobId::Spread,   1, row2Y);
+    placeKnob (KnobId::Feedback, 2, row2Y);
+    placeKnob (KnobId::Reverb,   3, row2Y);
 
-    placeLabel (KnobId::Spread,   0, row2Y);
-    placeLabel (KnobId::Feedback, 1, row2Y);
-    placeLabel (KnobId::Reverb,   2, row2Y);
-    placeLabel (KnobId::Mix,      3, row2Y);
-    placeLabel (KnobId::Mode,     4, row2Y);
+    placeLabel (KnobId::Pitch,    0, row2Y);
+    placeLabel (KnobId::Spread,   1, row2Y);
+    placeLabel (KnobId::Feedback, 2, row2Y);
+    placeLabel (KnobId::Reverb,   3, row2Y);
 
-    // Row 3: TrigRate knob on left
+    // Row 3: Mix, Mode, TrigRate + BPM display (3 knobs + BPM)
     int row3Y = margin + rowH * 2;
-    int trigKnobY = row3Y + (row3H - knobSize) / 2;
-    knob(KnobId::TrigRate).slider.setBounds (margin, trigKnobY, knobSize, knobSize);
-    valueLabel(KnobId::TrigRate).setBounds (margin - knobGap / 2, trigKnobY + knobSize + 2, knobSize + knobGap, labelH);
+    placeKnob (KnobId::Mix,      0, row3Y);
+    placeKnob (KnobId::Mode,     1, row3Y);
+    placeKnob (KnobId::TrigRate, 2, row3Y);
 
-    // BPM/TAP display - centered in remaining area
-    int bpmAreaX = margin + knobStep;
-    int bpmAreaW = knobStep * 4 - knobGap;
-    int bpmX = bpmAreaX + (bpmAreaW - bpmSize) / 2;
-    int bpmY = row3Y + (row3H - bpmSize) / 2;
+    placeLabel (KnobId::Mix,      0, row3Y);
+    placeLabel (KnobId::Mode,     1, row3Y);
+    placeLabel (KnobId::TrigRate, 2, row3Y);
+
+    // BPM/TAP display - in 4th column position
+    int bpmX = margin + knobStep * 3 + (knobSize - bpmSize) / 2;
+    int bpmY = row3Y + 10 + (knobSize - bpmSize) / 2;
     tapBpmLabel.setBounds (bpmX, bpmY, bpmSize, bpmSize);
     tapButton.setBounds (bpmX, bpmY, bpmSize, bpmSize);
 
-    // Button row
-    int btnRowY = margin + rowH * 2 + row3H;
+    // Button row (compact layout)
+    int btnRowY = margin + rowH * 3;
     int btnW = scaled (UISize::buttonWidth);
+    int btnWSmall = scaled (UISize::buttonWidthSmall);
     int btnH = scaled (UISize::buttonHeight);
     int btnY = btnRowY + (btnRowH - btnH) / 2;
 
@@ -598,21 +597,22 @@ void CloudLikeGranularEditor::resized()
     int toggleH = scaled (UISize::toggleHeight);
     int toggleY = btnRowY + (btnRowH - toggleH) / 2;
 
-    // Calculate layout: toggle switch + 4 regular buttons
-    int totalBtnWidth = toggleW + btnW * 4 + btnPadding * 8;
+    // Calculate compact layout: toggle + Freeze + Rnd(small) + KillDry + KillWet
+    int totalBtnWidth = toggleW + btnW * 3 + btnWSmall + btnPadding * 8;
     int btnStartX = (scaled (UISize::baseWidth) - totalBtnWidth) / 2;
 
     // Place toggle switch first
     trigModeButton.setBounds (btnStartX, toggleY, toggleW, toggleH);
 
-    // Place remaining buttons after toggle
-    int regularBtnStartX = btnStartX + toggleW + btnPadding * 2;
-    int btnSpacing = btnW + btnPadding * 2;
-
-    freezeButton.setBounds   (regularBtnStartX + btnSpacing * 0, btnY, btnW, btnH);
-    randomButton.setBounds   (regularBtnStartX + btnSpacing * 1, btnY, btnW, btnH);
-    killDryButton.setBounds  (regularBtnStartX + btnSpacing * 2, btnY, btnW, btnH);
-    killWetButton.setBounds  (regularBtnStartX + btnSpacing * 3, btnY, btnW, btnH);
+    // Place remaining buttons after toggle (compact spacing)
+    int curX = btnStartX + toggleW + btnPadding * 2;
+    freezeButton.setBounds (curX, btnY, btnW, btnH);
+    curX += btnW + btnPadding * 2;
+    randomButton.setBounds (curX, btnY, btnWSmall, btnH);
+    curX += btnWSmall + btnPadding * 2;
+    killDryButton.setBounds (curX, btnY, btnW, btnH);
+    curX += btnW + btnPadding * 2;
+    killWetButton.setBounds (curX, btnY, btnW, btnH);
 }
 
 //==============================================================================
