@@ -676,7 +676,7 @@ void CloudLikeGranularEditor::resized()
     // Row 3: TRIG Rate (left), BPM display (center, clickable)
     auto row3Content = row3.reduced (10, 0);
     auto trigRateArea = row3Content.removeFromLeft (colWidth);
-    auto tapBpmArea = row3Content.withSizeKeepingCentre (static_cast<int>(colWidth * 0.6f), static_cast<int>(colWidth * 0.6f));
+    auto tapBpmArea = row3Content.withSizeKeepingCentre (static_cast<int>(colWidth * 0.36f), static_cast<int>(colWidth * 0.36f));  // 60% of original size
 
     placeKnob (trigRateKnob, trigRateArea);
 
