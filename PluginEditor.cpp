@@ -556,9 +556,9 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     }
     g.fillEllipse (bpmBounds);
 
-    // Border: thicker in Manual mode, color matches MIX knob outline
+    // Border: thinner line, color matches MIX knob outline
     g.setColour (uiColors.mix.outline);
-    float borderThickness = isManualMode ? 2.5f : 1.5f;
+    float borderThickness = isManualMode ? 1.25f : 0.75f;
     g.drawEllipse (bpmBounds, borderThickness);
 
     // Draw "BPM" text below the circle
@@ -603,8 +603,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
         g.fillEllipse (trigLedBounds);
     }
-    g.setColour (uiColors.buttonText);
-    g.drawEllipse (trigLedBounds, 1.5f);  // Border to match BPM circle
+    g.setColour (uiColors.mix.outline);  // Same color as BPM LED border
+    g.drawEllipse (trigLedBounds, 0.75f);  // Half thickness
 
     // LED label (below LED)
     g.setColour (uiColors.knobLabel);
