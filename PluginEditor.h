@@ -176,7 +176,18 @@ public:
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider& slider) override
     {
-        float effectiveSliderPos = forceMaxPosition ? 1.0f : (forceMinPosition ? 0.0f : sliderPos);
+        // Get colors for this knob from map
+        auto it = sliderToKnobId.find(&slider);
+        const auto& colors = (it != sliderToKnobId.end())
+            ? uiColors.getKnobColors(it->second)
+            : uiColors.getKnobColors(KnobId::Mix);  // Default fallback
+
+        // Only apply forceMax/forceMin to Mix knob
+        bool isMixKnob = (it != sliderToKnobId.end() && it->second == KnobId::Mix);
+        float effectiveSliderPos = sliderPos;
+        if (isMixKnob)
+            effectiveSliderPos = forceMaxPosition ? 1.0f : (forceMinPosition ? 0.0f : sliderPos);
+
         auto radius = juce::jmin (width / 2, height / 2) - 4.0f;
         auto centreX = x + width * 0.5f;
         auto centreY = y + height * 0.5f;
@@ -184,12 +195,6 @@ public:
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
         auto angle = rotaryStartAngle + effectiveSliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-        // Get colors for this knob from map
-        auto it = sliderToKnobId.find(&slider);
-        const auto& colors = (it != sliderToKnobId.end())
-            ? uiColors.getKnobColors(it->second)
-            : uiColors.getKnobColors(KnobId::Mix);  // Default fallback
 
         // Draw outer circle
         g.setColour (colors.outline);
