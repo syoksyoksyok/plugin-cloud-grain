@@ -2194,15 +2194,13 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             // ★ Add excitation to read side (before filtering) - Karplus-Strong style
             float x = delayed + excitation;
 
-            // === Option 4: Two-pole lowpass filter (Butterworth-style) ===
-            // TEXTURE controls filter cutoff
-            float cutoffNorm = 0.1f + brightness * 0.85f;  // 0.1 to 0.95
-            float feedbackCoeff = 1.0f - cutoffNorm;
+            // === Option 4: One-pole lowpass filter (Karplus-Strong standard) ===
+            // TEXTURE controls filter cutoff (damping)
+            float cutoffNorm = 0.1f + brightness * 0.9f;  // 0.1 to 1.0
 
-            // Two-pole filter processing (filter x instead of delayed)
-            float filtered = x * cutoffNorm - res.z1 * feedbackCoeff * 1.4f + res.z2 * feedbackCoeff * feedbackCoeff * 0.5f;
-            res.z2 = res.z1;
-            res.z1 = filtered;
+            // Simple one-pole lowpass: stable and smooth
+            res.z1 = res.z1 + cutoffNorm * (x - res.z1);
+            float filtered = res.z1;
 
             // Feedback with decay (comb filter) - no excitation here
             res.delayLine[res.writePos] = filtered * decay;
