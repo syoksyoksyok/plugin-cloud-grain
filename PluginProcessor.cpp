@@ -2186,25 +2186,25 @@ void CloudLikeGranularProcessor::processResonestorBlock (juce::AudioBuffer<float
             float excitation = burstNoise * modeStrength +
                               ((r & 1) ? inSampleR : inSampleL) * 0.1f;
 
-            // Write excitation to delay line
-            res.delayLine[res.writePos] += excitation;
-
             // Apply pitch shift by modulating read position
             float pitchOffset = (1.0f - pitchRatio) * res.delayLine.size() * 0.5f;
             int readPos = static_cast<int>(res.writePos + pitchOffset) & res.delayLineMask;
             float delayed = res.delayLine[readPos];
+
+            // ★ Add excitation to read side (before filtering) - Karplus-Strong style
+            float x = delayed + excitation;
 
             // === Option 4: Two-pole lowpass filter (Butterworth-style) ===
             // TEXTURE controls filter cutoff
             float cutoffNorm = 0.1f + brightness * 0.85f;  // 0.1 to 0.95
             float feedbackCoeff = 1.0f - cutoffNorm;
 
-            // Two-pole filter processing
-            float filtered = delayed * cutoffNorm - res.z1 * feedbackCoeff * 1.4f + res.z2 * feedbackCoeff * feedbackCoeff * 0.5f;
+            // Two-pole filter processing (filter x instead of delayed)
+            float filtered = x * cutoffNorm - res.z1 * feedbackCoeff * 1.4f + res.z2 * feedbackCoeff * feedbackCoeff * 0.5f;
             res.z2 = res.z1;
             res.z1 = filtered;
 
-            // Feedback with decay (comb filter)
+            // Feedback with decay (comb filter) - no excitation here
             res.delayLine[res.writePos] = filtered * decay;
             res.writePos = (res.writePos + 1) & res.delayLineMask;
 
