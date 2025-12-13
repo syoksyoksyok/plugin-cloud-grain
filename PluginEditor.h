@@ -184,9 +184,9 @@ public:
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
 
-        // E-Paper button border
-        g.setColour (uiColors.buttonText);
-        g.drawRect (bounds, 2.0f);
+        // E-Paper button border (MIX knob outline color, half thickness)
+        g.setColour (uiColors.mix.outline);
+        g.drawRect (bounds, 1.0f);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
@@ -200,9 +200,9 @@ public:
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
 
-        // E-Paper button border
-        g.setColour (uiColors.buttonText);
-        g.drawRect (bounds, 2.0f);
+        // E-Paper button border (MIX knob outline color, half thickness)
+        g.setColour (uiColors.mix.outline);
+        g.drawRect (bounds, 1.0f);
 
         // Draw text centered (color changes based on toggle state)
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
@@ -270,7 +270,7 @@ private:
 
     juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
     juce::ToggleButton freezeButton  { "Freeze" };
-    juce::TextButton randomButton { "Rand" };
+    juce::TextButton randomButton { "Rnd" };
     juce::TextButton killDryButton { "KillDry" };  // Momentary: forces MIX to 100% while pressed
     juce::TextButton killWetButton { "KillWet" };  // Momentary: forces MIX to 0% while pressed
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
