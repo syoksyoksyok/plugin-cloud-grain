@@ -3,6 +3,27 @@
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include <array>
+#include <unordered_map>
+
+//==============================================================================
+// Knob identifiers for array-based management
+enum class KnobId
+{
+    Position = 0,
+    Density,
+    Size,
+    Texture,
+    Pitch,
+    Spread,
+    Feedback,
+    Reverb,
+    Mix,
+    Mode,
+    TrigRate,
+    NumKnobs
+};
+constexpr int kNumKnobs = static_cast<int>(KnobId::NumKnobs);
 
 //==============================================================================
 // Centralized Color Configuration
@@ -18,85 +39,83 @@ struct UIColors
         juce::Colour tickMarks;
     };
 
-    // Row 1 knob colors
-    KnobColors position      { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (224, 224, 224) };  // Position
-    KnobColors density       { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (224, 224, 224) };  // Density
-    KnobColors size          { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (224, 224, 224) };  // Size
-    KnobColors texture       { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (224, 224, 224) };  // Texture
-    KnobColors pitch         { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Pitch
+    // Default knob color (gray)
+    static constexpr auto defaultGray = juce::Colour (102, 102, 102);
+    static constexpr auto tickGray = juce::Colour (224, 224, 224);
 
-    // Row 2 knob colors
-    KnobColors spread        { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Spread
-    KnobColors feedback      { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Feedback
-    KnobColors reverb        { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Reverb
-    KnobColors mix           { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // Mix
-    KnobColors mode          { juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), juce::Colour (224, 224, 224) };  // Mode
-
-    // Row 3 knob colors
-    KnobColors trigRate      { juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (102, 102, 102), juce::Colour (224, 224, 224) };  // TRIG Rate
+    // Knob colors indexed by KnobId
+    std::array<KnobColors, kNumKnobs> knobColors {{
+        // Row 1
+        { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), tickGray },  // Position
+        { juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), juce::Colour (0xFFC94C63), tickGray },  // Density
+        { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), tickGray },  // Size
+        { juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), juce::Colour (0xFF479FA5), tickGray },  // Texture
+        { defaultGray, defaultGray, defaultGray, tickGray },  // Pitch
+        // Row 2
+        { defaultGray, defaultGray, defaultGray, tickGray },  // Spread
+        { defaultGray, defaultGray, defaultGray, tickGray },  // Feedback
+        { defaultGray, defaultGray, defaultGray, tickGray },  // Reverb
+        { defaultGray, defaultGray, defaultGray, tickGray },  // Mix
+        { juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), juce::Colour (0xFFDAC1AF), tickGray },  // Mode
+        // Row 3
+        { defaultGray, defaultGray, defaultGray, tickGray },  // TrigRate
+    }};
 
     // Button colors
     juce::Colour buttonText              { 26, 26, 26 };
     juce::Colour buttonBackground        { 250, 250, 250 };
     juce::Colour buttonBackgroundPressed { 224, 224, 224 };
-    juce::Colour freezeTextOn            { 0xFFBAD64F };  // Freeze ON color
+    juce::Colour freezeTextOn            { 0xFFBAD64F };
     juce::Colour freezeTextOff           { 26, 26, 26 };
+    juce::Colour momentaryOnColor        { 0xFFC94C63 };  // Position knob color for Kill Dry/Wet
 
     // Label colors
-    juce::Colour modeLabel { 52, 73, 94 };  // Ink blue
     juce::Colour knobLabel { 102, 102, 102 };
 
     // Background
     juce::Colour background { 255, 255, 255 };
+
+    // Get knob colors by ID
+    const KnobColors& getKnobColors(KnobId id) const { return knobColors[static_cast<int>(id)]; }
 };
 
 // Global color configuration instance
-static UIColors uiColors;
+inline UIColors uiColors;
 
 //==============================================================================
 // Fixed UI Size Configuration (100% scale base values)
-// スケーリング対応の固定サイズ定義
 namespace UISize
 {
-    // Window base size (100% scale)
     constexpr int baseWidth  = 640;
     constexpr int baseHeight = 440;
 
-    // Margins & Padding
     constexpr int windowMargin = 10;
     constexpr int knobPadding  = 8;
 
-    // Grid layout
     constexpr int numColumns = 5;
     constexpr int numRows = 3;
-    constexpr int knobCellWidth = 124;   // (640 - 20) / 5
+    constexpr int knobCellWidth = 124;
     constexpr int knobRowHeight = 110;
     constexpr int row3Height = 100;
 
-    // Knobs
     constexpr int knobDiameter = 60;
 
-    // Labels
     constexpr int labelHeight = 18;
     constexpr int labelFontSize = 11;
-    constexpr int knobLabelOffsetY = 25;  // Distance from knob bottom to label
+    constexpr int knobLabelOffsetY = 25;
 
-    // Buttons
-    constexpr int buttonWidth = 83;    // 2/3 of original (124 * 2/3)
+    constexpr int buttonWidth = 83;
     constexpr int buttonHeight = 36;
     constexpr int buttonRowHeight = 50;
     constexpr int buttonPadding = 3;
 
-    // BPM/TAP display
     constexpr int bpmDisplaySize = 40;
     constexpr int bpmFontSize = 10;
 
-    // LEDs
     constexpr int ledDiameter = 40;
     constexpr int ledSpacing = 24;
     constexpr int ledLabelFontSize = 9;
 
-    // Available scale factors
     constexpr float scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
     constexpr int numScales = 4;
 }
@@ -106,9 +125,12 @@ namespace UISize
 class EPaperLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    UIColors::KnobColors* knobColors = nullptr;  // Pointer to current knob's colors
-    bool forceMaxPosition = false;  // When true, indicator shows 100% position (for Kill Dry)
-    bool forceMinPosition = false;  // When true, indicator shows 0% position (for Kill Wet)
+    // Map slider pointer to KnobId for color lookup
+    std::unordered_map<juce::Slider*, KnobId> sliderToKnobId;
+
+    // Mix knob special states
+    bool forceMaxPosition = false;
+    bool forceMinPosition = false;
 
     EPaperLookAndFeel()
     {
@@ -117,11 +139,15 @@ public:
         setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colour::fromRGB (224, 224, 224));
     }
 
+    void registerSlider(juce::Slider* slider, KnobId id)
+    {
+        sliderToKnobId[slider] = id;
+    }
+
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider& slider) override
     {
-        // Override slider position if forceMaxPosition/forceMinPosition is set (Kill Dry/Wet active)
         float effectiveSliderPos = forceMaxPosition ? 1.0f : (forceMinPosition ? 0.0f : sliderPos);
         auto radius = juce::jmin (width / 2, height / 2) - 4.0f;
         auto centreX = x + width * 0.5f;
@@ -129,82 +155,68 @@ public:
         auto rx = centreX - radius;
         auto ry = centreY - radius;
         auto rw = radius * 2.0f;
-        // Standard angle calculation with Y-axis negated in rendering
         auto angle = rotaryStartAngle + effectiveSliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-        // Get colors for this knob (use default if not set)
-        juce::Colour outlineColor = knobColors ? knobColors->outline : juce::Colour (102, 102, 102);
-        juce::Colour indicatorColor = knobColors ? knobColors->indicator : juce::Colour (102, 102, 102);
-        juce::Colour centerDotColor = knobColors ? knobColors->centerDot : juce::Colour (102, 102, 102);
-        juce::Colour tickMarkColor = knobColors ? knobColors->tickMarks : juce::Colour (224, 224, 224);
+        // Get colors for this knob from map
+        auto it = sliderToKnobId.find(&slider);
+        const auto& colors = (it != sliderToKnobId.end())
+            ? uiColors.getKnobColors(it->second)
+            : uiColors.getKnobColors(KnobId::Mix);  // Default fallback
 
-        // Draw outer circle (outline) - use knob-specific color
-        g.setColour (outlineColor);
+        // Draw outer circle
+        g.setColour (colors.outline);
         g.drawEllipse (rx, ry, rw, rw, 2.0f);
 
         // Draw tick marks
-        g.setColour (tickMarkColor);
+        g.setColour (colors.tickMarks);
         for (int i = 0; i < 5; ++i)
         {
             auto tickAngle = rotaryStartAngle + i * (rotaryEndAngle - rotaryStartAngle) / 4.0f;
             auto tickRadius = radius - 2.0f;
             auto tickLength = 6.0f;
-
             auto tickX1 = centreX + tickRadius * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
             auto tickY1 = centreY + tickRadius * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
             auto tickX2 = centreX + (tickRadius - tickLength) * std::cos (tickAngle - juce::MathConstants<float>::halfPi);
             auto tickY2 = centreY + (tickRadius - tickLength) * std::sin (tickAngle - juce::MathConstants<float>::halfPi);
-
             g.drawLine (tickX1, tickY1, tickX2, tickY2, 2.0f);
         }
 
-        // Draw center dot - use knob-specific color
-        g.setColour (centerDotColor);
+        // Draw center dot
+        g.setColour (colors.centerDot);
         g.fillEllipse (centreX - 3.0f, centreY - 3.0f, 6.0f, 6.0f);
 
-        // Draw indicator line - use knob-specific color
-        g.setColour (indicatorColor);
+        // Draw indicator line
+        g.setColour (colors.indicator);
         auto pointerLength = radius - 8.0f;
-        auto pointerThickness = 3.0f;
         juce::Path p;
         auto pointerX = centreX + pointerLength * std::cos (angle - juce::MathConstants<float>::halfPi);
         auto pointerY = centreY + pointerLength * std::sin (angle - juce::MathConstants<float>::halfPi);
-
         p.startNewSubPath (centreX, centreY);
         p.lineTo (pointerX, pointerY);
-        g.strokePath (p, juce::PathStrokeType (pointerThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath (p, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour& /*backgroundColour*/,
-                              bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
+                              bool, bool shouldDrawButtonAsDown) override
     {
         auto bounds = button.getLocalBounds().toFloat();
-
-        // E-Paper button background
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
-
-        // E-Paper button border (MIX knob outline color, half thickness)
-        g.setColour (uiColors.mix.outline);
+        g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
         g.drawRect (bounds, 1.0f);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
-                          bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+                          bool, bool shouldDrawButtonAsDown) override
     {
         auto bounds = button.getLocalBounds().toFloat();
         auto fontSize = juce::jmin (15.0f, button.getHeight() * 0.4f);
 
-        // Draw button background (same style as TextButton)
-        bool isOn = button.getToggleState();
         g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
         g.fillRect (bounds);
-
-        // E-Paper button border (MIX knob outline color, half thickness)
-        g.setColour (uiColors.mix.outline);
+        g.setColour (uiColors.getKnobColors(KnobId::Mix).outline);
         g.drawRect (bounds, 1.0f);
 
-        // Draw text centered (color changes based on toggle state)
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
         g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
         g.drawText (button.getButtonText(), bounds, juce::Justification::centred, true);
@@ -226,12 +238,11 @@ public:
     void mouseUp (const juce::MouseEvent& event) override;
     void mouseMove (const juce::MouseEvent& event) override;
 
-    // Scale methods
     void setScale (float newScale);
     float getScale() const { return uiScale; }
 
 private:
-    // ========== REFACTORED: timerCallback helper functions ==========
+    // ========== timerCallback helper functions ==========
     void updateButtonStates(bool trigMode);
     void updateModeLabels(int mode);
     void updateTrigRateLabel(float trigRate);
@@ -241,85 +252,70 @@ private:
     void updateLedIndicators();
     void updateBpmDisplay(bool trigMode);
 
+    // ========== Setup helper functions ==========
+    void setupKnob(KnobId id, const juce::String& name);
+    void setupMomentaryButton(juce::TextButton& button, const juce::String& paramId);
+    void setupValueLabel(juce::Label& label);
+
     CloudLikeGranularProcessor& processor;
 
-    std::unique_ptr<EPaperLookAndFeel> ePaperLookAndFeel;  // Custom LookAndFeel for buttons (managed lifetime)
+    // Single LookAndFeel instance (uses slider map for colors)
+    std::unique_ptr<EPaperLookAndFeel> lookAndFeel;
 
-    // Individual LookAndFeel instances for each knob (to support per-knob colors)
-    std::unique_ptr<EPaperLookAndFeel> positionLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> densityLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> sizeLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> textureLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> pitchLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> spreadLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> feedbackLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> reverbLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> mixLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> modeLookAndFeel;
-    std::unique_ptr<EPaperLookAndFeel> trigRateLookAndFeel;
-
+    // Knob structure
     struct Knob
     {
         juce::Slider slider;
         juce::Label  label;
     };
 
-    Knob modeKnob, positionKnob, sizeKnob, pitchKnob, densityKnob;
-    Knob textureKnob, spreadKnob, feedbackKnob, reverbKnob, mixKnob;
-    Knob trigRateKnob;  // 3rd row: TRIG rate/division control
+    // Array-based knob management
+    std::array<Knob, kNumKnobs> knobs;
+    std::array<juce::Label, kNumKnobs> valueLabels;
 
-    juce::ToggleButton trigModeButton { "Trig Mode" };  // Manual/Auto toggle
-    juce::ToggleButton freezeButton  { "Freeze" };
+    // Knob names and parameter IDs
+    static constexpr std::array<const char*, kNumKnobs> knobNames = {{
+        "Position", "Density", "Size", "Texture", "Pitch",
+        "Spread", "Feedback", "Reverb", "Mix", "Mode", "Trig Rate"
+    }};
+    static constexpr std::array<const char*, kNumKnobs> paramIds = {{
+        "position", "density", "size", "texture", "pitch",
+        "spread", "feedback", "reverb", "mix", "mode", "trigRate"
+    }};
+
+    // Buttons
+    juce::ToggleButton trigModeButton { "Trig Mode" };
+    juce::ToggleButton freezeButton { "Freeze" };
     juce::TextButton randomButton { "Rnd" };
-    juce::TextButton killDryButton { "KillDry" };  // Momentary: forces MIX to 100% while pressed
-    juce::TextButton killWetButton { "KillWet" };  // Momentary: forces MIX to 0% while pressed
-    juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
-    juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
-    juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo
-    juce::TextButton tapButton;  // Transparent tap button overlay (Manual mode only)
+    juce::TextButton killDryButton { "KillDry" };
+    juce::TextButton killWetButton { "KillWet" };
+    juce::TextButton tapButton;
 
-    // Custom value labels for all knobs (displays meaningful text instead of raw numbers)
-    juce::Label positionValueLabel;
-    juce::Label sizeValueLabel;
-    juce::Label pitchValueLabel;
-    juce::Label densityValueLabel;
-    juce::Label textureValueLabel;
-    juce::Label spreadValueLabel;
-    juce::Label feedbackValueLabel;
-    juce::Label reverbValueLabel;
-    juce::Label mixValueLabel;
+    // Labels
+    juce::Label tapBpmLabel;
 
-    // LED indicators for tempo visualization
-    bool baseTempoLedOn = false;   // LED 1: Base tempo (×1) indicator
-    bool trigRateLedOn = false;    // LED 2: TRIG RATE tempo indicator
-    int ledBlinkDuration = 0;      // Counter for LED blink duration (in timer ticks)
-    int ledBlinkDuration2 = 0;     // Counter for second LED
+    // LED state
+    bool baseTempoLedOn = false;
+    bool trigRateLedOn = false;
+    int ledBlinkDuration = 0;
+    int ledBlinkDuration2 = 0;
 
+    // Attachments
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
-    std::unique_ptr<SliderAttachment> modeAttachment;
-    std::unique_ptr<SliderAttachment> positionAttachment;
-    std::unique_ptr<SliderAttachment> sizeAttachment;
-    std::unique_ptr<SliderAttachment> pitchAttachment;
-    std::unique_ptr<SliderAttachment> densityAttachment;
-    std::unique_ptr<SliderAttachment> textureAttachment;
-    std::unique_ptr<SliderAttachment> spreadAttachment;
-    std::unique_ptr<SliderAttachment> feedbackAttachment;
-    std::unique_ptr<SliderAttachment> reverbAttachment;
-    std::unique_ptr<SliderAttachment> mixAttachment;
-    std::unique_ptr<SliderAttachment> trigRateAttachment;
+    std::array<std::unique_ptr<SliderAttachment>, kNumKnobs> sliderAttachments;
     std::unique_ptr<ButtonAttachment> trigModeAttachment;
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
-    void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox = true);
-
-    // UI Scale factor (1.0 = 100%, 1.25 = 125%, 1.5 = 150%, 2.0 = 200%)
+    // UI Scale
     float uiScale = 1.0f;
+    int scaled(int baseValue) const { return static_cast<int>(baseValue * uiScale); }
+    float scaledF(float baseValue) const { return baseValue * uiScale; }
 
-    // Helper to get scaled integer value
-    int scaled (int baseValue) const { return static_cast<int> (baseValue * uiScale); }
-    float scaledF (float baseValue) const { return baseValue * uiScale; }
+    // Knob accessors for convenience
+    Knob& knob(KnobId id) { return knobs[static_cast<int>(id)]; }
+    juce::Label& valueLabel(KnobId id) { return valueLabels[static_cast<int>(id)]; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularEditor)
 };
