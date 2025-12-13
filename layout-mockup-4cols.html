@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GranularTexture - 4 Knobs Per Row Layout Mockup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #333;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+        h1 {
+            color: #fff;
+            text-align: center;
+        }
+        h2 {
+            color: #ccc;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .comparison {
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .layout-box {
+            background: #222;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        /* Plugin window simulation */
+        .plugin-window {
+            background: #ffffff;
+            border: 1px solid #666;
+            position: relative;
+        }
+        .current {
+            width: 446px;
+            height: 358px;
+        }
+        .new-layout {
+            width: 362px;  /* 34 + (50+32)*4 - 32 + 34 = 34 + 296 + 34 = 364... let me recalc */
+            /* 4 knobs: 50*4 = 200, 3 gaps: 32*3 = 96, margins: 34*2 = 68 => 200+96+68 = 364 */
+            height: 448px;  /* Will calculate based on rows */
+        }
+
+        /* Knob styling */
+        .knob {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #666;
+            background: #fff;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .knob::after {
+            content: '';
+            width: 3px;
+            height: 18px;
+            background: #666;
+            position: absolute;
+            top: 6px;
+            border-radius: 2px;
+        }
+        .knob.pink { border-color: #C94C63; }
+        .knob.pink::after { background: #C94C63; }
+        .knob.teal { border-color: #479FA5; }
+        .knob.teal::after { background: #479FA5; }
+        .knob.tan { border-color: #DAC1AF; }
+        .knob.tan::after { background: #DAC1AF; }
+
+        .knob-label {
+            position: absolute;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            width: 80px;
+        }
+
+        /* Button styling */
+        .button {
+            position: absolute;
+            background: #fafafa;
+            border: 1px solid #666;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Toggle switch */
+        .toggle-switch {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .toggle-track {
+            width: 36px;
+            height: 18px;
+            background: #e6e6e6;
+            border-radius: 9px;
+            border: 1px solid #b4b4b4;
+            position: relative;
+        }
+        .toggle-thumb {
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            border: 1px solid #b4b4b4;
+            position: absolute;
+            top: 0;
+            left: 1px;
+        }
+        .toggle-label {
+            color: #a0a0a0;
+        }
+        .toggle-label.active {
+            color: #1a1a1a;
+        }
+
+        /* BPM display */
+        .bpm-display {
+            position: absolute;
+            width: 36px;
+            height: 36px;
+            border: 2px solid #666;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        /* Dimension labels */
+        .dim-label {
+            position: absolute;
+            font-size: 10px;
+            color: #999;
+        }
+        .dim-h {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+
+        /* Info box */
+        .info {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 800px;
+        }
+        .info h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info td, .info th {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .info th {
+            background: #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>GranularTexture Layout Comparison</h1>
+
+    <div class="comparison">
+        <!-- Current Layout (5 per row) -->
+        <div class="layout-box">
+            <h2>Current: 5 Knobs Per Row (446 x 358)</h2>
+            <div class="plugin-window current">
+                <!-- Row 1: Position, Density, Size, Texture, Pitch -->
+                <div class="knob pink" style="left: 34px; top: 44px;"></div>
+                <div class="knob-label" style="left: 19px; top: 96px;">Position</div>
+
+                <div class="knob pink" style="left: 116px; top: 44px;"></div>
+                <div class="knob-label" style="left: 101px; top: 96px;">Density</div>
+
+                <div class="knob teal" style="left: 198px; top: 44px;"></div>
+                <div class="knob-label" style="left: 183px; top: 96px;">Size</div>
+
+                <div class="knob teal" style="left: 280px; top: 44px;"></div>
+                <div class="knob-label" style="left: 265px; top: 96px;">Texture</div>
+
+                <div class="knob" style="left: 362px; top: 44px;"></div>
+                <div class="knob-label" style="left: 347px; top: 96px;">Pitch</div>
+
+                <!-- Row 2: Spread, Feedback, Reverb, Mix, Mode -->
+                <div class="knob" style="left: 34px; top: 134px;"></div>
+                <div class="knob-label" style="left: 19px; top: 186px;">Spread</div>
+
+                <div class="knob" style="left: 116px; top: 134px;"></div>
+                <div class="knob-label" style="left: 101px; top: 186px;">Feedback</div>
+
+                <div class="knob" style="left: 198px; top: 134px;"></div>
+                <div class="knob-label" style="left: 183px; top: 186px;">Reverb</div>
+
+                <div class="knob" style="left: 280px; top: 134px;"></div>
+                <div class="knob-label" style="left: 265px; top: 186px;">Mix</div>
+
+                <div class="knob tan" style="left: 362px; top: 134px;"></div>
+                <div class="knob-label" style="left: 347px; top: 186px;">Mode</div>
+
+                <!-- Row 3: TrigRate + BPM -->
+                <div class="knob" style="left: 34px; top: 224px;"></div>
+                <div class="knob-label" style="left: 19px; top: 276px;">TrigRate</div>
+                <div class="bpm-display" style="left: 205px; top: 246px;">TAP</div>
+
+                <!-- Button Row -->
+                <div class="toggle-switch" style="left: 34px; top: 322px;">
+                    <span class="toggle-label active">Manual</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                    <span class="toggle-label">Auto</span>
+                </div>
+                <div class="button" style="left: 138px; top: 318px; width: 70px; height: 30px;">Freeze</div>
+                <div class="button" style="left: 212px; top: 318px; width: 70px; height: 30px;">Rnd</div>
+                <div class="button" style="left: 286px; top: 318px; width: 70px; height: 30px;">KillDry</div>
+                <div class="button" style="left: 360px; top: 318px; width: 70px; height: 30px;">KillWet</div>
+
+                <!-- Dimensions -->
+                <div class="dim-label" style="left: 200px; top: -20px;">446px</div>
+                <div class="dim-label dim-h" style="left: -25px; top: 160px;">358px</div>
+            </div>
+        </div>
+
+        <!-- New Layout (4 per row) -->
+        <div class="layout-box">
+            <h2>New: 4 Knobs Per Row (364 x 448)</h2>
+            <div class="plugin-window new-layout" style="width: 364px; height: 448px;">
+                <!-- Row 1: Position, Density, Size, Texture -->
+                <div class="knob pink" style="left: 34px; top: 44px;"></div>
+                <div class="knob-label" style="left: 19px; top: 96px;">Position</div>
+
+                <div class="knob pink" style="left: 116px; top: 44px;"></div>
+                <div class="knob-label" style="left: 101px; top: 96px;">Density</div>
+
+                <div class="knob teal" style="left: 198px; top: 44px;"></div>
+                <div class="knob-label" style="left: 183px; top: 96px;">Size</div>
+
+                <div class="knob teal" style="left: 280px; top: 44px;"></div>
+                <div class="knob-label" style="left: 265px; top: 96px;">Texture</div>
+
+                <!-- Row 2: Pitch, Spread, Feedback, Reverb -->
+                <div class="knob" style="left: 34px; top: 134px;"></div>
+                <div class="knob-label" style="left: 19px; top: 186px;">Pitch</div>
+
+                <div class="knob" style="left: 116px; top: 134px;"></div>
+                <div class="knob-label" style="left: 101px; top: 186px;">Spread</div>
+
+                <div class="knob" style="left: 198px; top: 134px;"></div>
+                <div class="knob-label" style="left: 183px; top: 186px;">Feedback</div>
+
+                <div class="knob" style="left: 280px; top: 134px;"></div>
+                <div class="knob-label" style="left: 265px; top: 186px;">Reverb</div>
+
+                <!-- Row 3: Mix, Mode, TrigRate + BPM -->
+                <div class="knob" style="left: 34px; top: 224px;"></div>
+                <div class="knob-label" style="left: 19px; top: 276px;">Mix</div>
+
+                <div class="knob tan" style="left: 116px; top: 224px;"></div>
+                <div class="knob-label" style="left: 101px; top: 276px;">Mode</div>
+
+                <div class="knob" style="left: 198px; top: 224px;"></div>
+                <div class="knob-label" style="left: 183px; top: 276px;">TrigRate</div>
+
+                <div class="bpm-display" style="left: 280px; top: 237px;">TAP</div>
+
+                <!-- Button Row -->
+                <div class="toggle-switch" style="left: 34px; top: 322px;">
+                    <span class="toggle-label active">Manual</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                    <span class="toggle-label">Auto</span>
+                </div>
+                <div class="button" style="left: 138px; top: 318px; width: 70px; height: 30px;">Freeze</div>
+                <div class="button" style="left: 212px; top: 318px; width: 70px; height: 30px;">Rnd</div>
+
+                <!-- Row 5: KillDry, KillWet buttons (moved to new row) -->
+                <div class="button" style="left: 34px; top: 360px; width: 70px; height: 30px;">KillDry</div>
+                <div class="button" style="left: 138px; top: 360px; width: 70px; height: 30px;">KillWet</div>
+
+                <!-- Dimensions -->
+                <div class="dim-label" style="left: 160px; top: -20px;">364px</div>
+                <div class="dim-label dim-h" style="left: -25px; top: 200px;">448px</div>
+            </div>
+        </div>
+
+        <!-- Alternative Layout (4 per row, single button row) -->
+        <div class="layout-box">
+            <h2>Alt: 4 Knobs Per Row, Compact Buttons (364 x 408)</h2>
+            <div class="plugin-window new-layout" style="width: 364px; height: 408px;">
+                <!-- Row 1: Position, Density, Size, Texture -->
+                <div class="knob pink" style="left: 34px; top: 44px;"></div>
+                <div class="knob-label" style="left: 19px; top: 96px;">Position</div>
+
+                <div class="knob pink" style="left: 116px; top: 44px;"></div>
+                <div class="knob-label" style="left: 101px; top: 96px;">Density</div>
+
+                <div class="knob teal" style="left: 198px; top: 44px;"></div>
+                <div class="knob-label" style="left: 183px; top: 96px;">Size</div>
+
+                <div class="knob teal" style="left: 280px; top: 44px;"></div>
+                <div class="knob-label" style="left: 265px; top: 96px;">Texture</div>
+
+                <!-- Row 2: Pitch, Spread, Feedback, Reverb -->
+                <div class="knob" style="left: 34px; top: 134px;"></div>
+                <div class="knob-label" style="left: 19px; top: 186px;">Pitch</div>
+
+                <div class="knob" style="left: 116px; top: 134px;"></div>
+                <div class="knob-label" style="left: 101px; top: 186px;">Spread</div>
+
+                <div class="knob" style="left: 198px; top: 134px;"></div>
+                <div class="knob-label" style="left: 183px; top: 186px;">Feedback</div>
+
+                <div class="knob" style="left: 280px; top: 134px;"></div>
+                <div class="knob-label" style="left: 265px; top: 186px;">Reverb</div>
+
+                <!-- Row 3: Mix, Mode, TrigRate + BPM -->
+                <div class="knob" style="left: 34px; top: 224px;"></div>
+                <div class="knob-label" style="left: 19px; top: 276px;">Mix</div>
+
+                <div class="knob tan" style="left: 116px; top: 224px;"></div>
+                <div class="knob-label" style="left: 101px; top: 276px;">Mode</div>
+
+                <div class="knob" style="left: 198px; top: 224px;"></div>
+                <div class="knob-label" style="left: 183px; top: 276px;">TrigRate</div>
+
+                <div class="bpm-display" style="left: 280px; top: 237px;">TAP</div>
+
+                <!-- Button Row - All in one row with smaller buttons -->
+                <div class="toggle-switch" style="left: 20px; top: 322px; transform: scale(0.9);">
+                    <span class="toggle-label active">Manual</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                    <span class="toggle-label">Auto</span>
+                </div>
+                <div class="button" style="left: 115px; top: 318px; width: 55px; height: 30px; font-size: 10px;">Freeze</div>
+                <div class="button" style="left: 174px; top: 318px; width: 40px; height: 30px; font-size: 10px;">Rnd</div>
+                <div class="button" style="left: 218px; top: 318px; width: 60px; height: 30px; font-size: 10px;">KillDry</div>
+                <div class="button" style="left: 282px; top: 318px; width: 60px; height: 30px; font-size: 10px;">KillWet</div>
+
+                <!-- Dimensions -->
+                <div class="dim-label" style="left: 160px; top: -20px;">364px</div>
+                <div class="dim-label dim-h" style="left: -25px; top: 180px;">408px</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Table -->
+    <div class="info">
+        <h3>Layout Comparison</h3>
+        <table>
+            <tr>
+                <th>Layout</th>
+                <th>Width</th>
+                <th>Height</th>
+                <th>Knobs/Row</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td><b>Current</b></td>
+                <td>446px</td>
+                <td>358px</td>
+                <td>5</td>
+                <td>Wider but shorter</td>
+            </tr>
+            <tr>
+                <td><b>New (2 button rows)</b></td>
+                <td>364px</td>
+                <td>448px</td>
+                <td>4</td>
+                <td>Narrower but taller, buttons split into 2 rows</td>
+            </tr>
+            <tr>
+                <td><b>Alt (compact)</b></td>
+                <td>364px</td>
+                <td>408px</td>
+                <td>4</td>
+                <td>Narrower, all buttons in one row (smaller)</td>
+            </tr>
+        </table>
+
+        <h3 style="margin-top: 20px;">Calculation Details (New Layout)</h3>
+        <table>
+            <tr>
+                <th>Item</th>
+                <th>Value</th>
+                <th>Calculation</th>
+            </tr>
+            <tr>
+                <td>Knob Diameter</td>
+                <td>50px</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Knob Gap</td>
+                <td>32px</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Window Margin</td>
+                <td>34px</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Knob Row Width</td>
+                <td>296px</td>
+                <td>4 knobs (200) + 3 gaps (96) = 296</td>
+            </tr>
+            <tr>
+                <td>Base Width</td>
+                <td>364px</td>
+                <td>34 + 296 + 34 = 364</td>
+            </tr>
+            <tr>
+                <td>Row Height</td>
+                <td>90px</td>
+                <td>50 (knob) + 20 (label) + 20 (padding)</td>
+            </tr>
+            <tr>
+                <td>Base Height (Alt)</td>
+                <td>~408px</td>
+                <td>34 + 90*3 + 80 (row3) + 50 (buttons) + 34</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
