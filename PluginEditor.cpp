@@ -531,9 +531,20 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     bool isManualMode = !trigMode;
 
     // Background color: green when base tempo blinks, otherwise normal colors
+    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (baseTempoLedOn)
     {
-        g.setColour (juce::Colour::fromRGB (100, 180, 100));  // Green (tempo blink)
+        // Outer glow layers (diffuse effect)
+        auto glowColor = juce::Colour::fromRGB (100, 180, 100);
+        for (int i = 4; i >= 1; --i)
+        {
+            float glowExpand = i * 3.0f;
+            float alpha = 0.15f / i;  // Fading alpha for outer layers
+            g.setColour (glowColor.withAlpha (alpha));
+            g.fillEllipse (bpmBounds.expanded (glowExpand));
+        }
+        // Main LED color
+        g.setColour (glowColor);
     }
     else if (isManualMode)
     {
@@ -564,21 +575,36 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.drawText ("(TAP)", tapHintArea, juce::Justification::centred);
     }
 
-    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle
-    auto ledSize = 12.0f;
+    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle, same size as BPM circle
+    auto ledSize = bpmBounds.getWidth();  // Same size as BPM circle
     auto ledX = bpmBounds.getRight() + 15.0f;  // LED: Right of BPM circle
     auto ledY = bpmBounds.getCentreY() - ledSize / 2.0f;  // Vertically centered with BPM circle
 
-    // LED: TRIG RATE tempo (red)
-    g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
-    g.fillEllipse (ledX, ledY, ledSize, ledSize);
+    // LED: TRIG RATE tempo (red) with diffuse glow effect
+    auto trigLedBounds = juce::Rectangle<float> (ledX, ledY, ledSize, ledSize);
+
+    // Draw diffuse glow effect when LED is on (realistic LED appearance)
     if (trigRateLedOn)
     {
-        g.setColour (juce::Colour::fromRGB (180, 100, 100));  // On color (red)
-        g.fillEllipse (ledX + 2, ledY + 2, ledSize - 4, ledSize - 4);
+        auto glowColor = juce::Colour::fromRGB (180, 100, 100);
+        for (int i = 4; i >= 1; --i)
+        {
+            float glowExpand = i * 3.0f;
+            float alpha = 0.15f / i;  // Fading alpha for outer layers
+            g.setColour (glowColor.withAlpha (alpha));
+            g.fillEllipse (trigLedBounds.expanded (glowExpand));
+        }
+        // Main LED color
+        g.setColour (glowColor);
+        g.fillEllipse (trigLedBounds);
+    }
+    else
+    {
+        g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
+        g.fillEllipse (trigLedBounds);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX, ledY, ledSize, ledSize, 0.75f);
+    g.drawEllipse (trigLedBounds, 1.5f);  // Border to match BPM circle
 
     // LED label (below LED)
     g.setColour (uiColors.knobLabel);
