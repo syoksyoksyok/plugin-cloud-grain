@@ -146,28 +146,20 @@ public:
     {
         auto bounds = button.getLocalBounds().toFloat();
         auto fontSize = juce::jmin (15.0f, button.getHeight() * 0.4f);
-        auto tickWidth = fontSize * 1.2f;
 
-        // Draw checkbox
-        auto checkboxBounds = bounds.removeFromLeft (tickWidth).reduced (2.0f);
-        g.setColour (uiColors.buttonBackground);
-        g.fillRect (checkboxBounds);
+        // Draw button background (same style as TextButton)
+        bool isOn = button.getToggleState();
+        g.setColour (shouldDrawButtonAsDown ? uiColors.buttonBackgroundPressed : uiColors.buttonBackground);
+        g.fillRect (bounds);
 
+        // E-Paper button border
         g.setColour (uiColors.buttonText);
-        g.drawRect (checkboxBounds, 2.0f);
+        g.drawRect (bounds, 2.0f);
 
-        if (button.getToggleState())
-        {
-            auto tick = checkboxBounds.reduced (4.0f);
-            g.setColour (uiColors.buttonText);
-            g.fillRect (tick);
-        }
-
-        // Draw text (color is set by component's textColourId, not here)
+        // Draw text centered (color changes based on toggle state)
         g.setColour (button.findColour (juce::ToggleButton::textColourId));
         g.setFont (juce::Font ("Courier New", fontSize, juce::Font::bold));
-        g.drawText (button.getButtonText(), bounds.withTrimmedLeft (2.0f),
-                   juce::Justification::centredLeft, true);
+        g.drawText (button.getButtonText(), bounds, juce::Justification::centred, true);
     }
 };
 
