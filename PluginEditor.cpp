@@ -564,8 +564,8 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.drawText ("(TAP)", tapHintArea, juce::Justification::centred);
     }
 
-    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle
-    auto ledSize = 12.0f;
+    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle, same size as BPM circle
+    auto ledSize = bpmBounds.getWidth();  // Same size as BPM circle
     auto ledX = bpmBounds.getRight() + 15.0f;  // LED: Right of BPM circle
     auto ledY = bpmBounds.getCentreY() - ledSize / 2.0f;  // Vertically centered with BPM circle
 
@@ -575,10 +575,11 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     if (trigRateLedOn)
     {
         g.setColour (juce::Colour::fromRGB (180, 100, 100));  // On color (red)
-        g.fillEllipse (ledX + 2, ledY + 2, ledSize - 4, ledSize - 4);
+        auto innerOffset = ledSize * 0.15f;  // Proportional inner circle offset
+        g.fillEllipse (ledX + innerOffset, ledY + innerOffset, ledSize - innerOffset * 2, ledSize - innerOffset * 2);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX, ledY, ledSize, ledSize, 0.75f);
+    g.drawEllipse (ledX, ledY, ledSize, ledSize, 1.5f);  // Thicker border to match BPM circle
 
     // LED label (below LED)
     g.setColour (uiColors.knobLabel);
