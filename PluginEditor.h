@@ -107,18 +107,6 @@ namespace UISize
     // Calculated row height: knob + label space + some padding
     constexpr int knobRowHeight = knobDiameter + knobLabelHeight + 20;
 
-    // Window size (calculated from layout)
-    // Width: margin + 5 knobs + 4 gaps + margin
-    constexpr int baseWidth  = windowMargin + (knobDiameter * 5) + (knobGap * 4) + windowMargin;  // = 398
-    // Height: margin + 2 rows + row3 + button row + margin
-    constexpr int row3Height = 80;
-    constexpr int buttonRowHeight = 50;
-    constexpr int baseHeight = windowMargin + (knobRowHeight * 2) + row3Height + buttonRowHeight + windowMargin;  // = 330
-
-    // Labels
-    constexpr int labelHeight = 18;
-    constexpr int labelFontSize = 11;
-
     // Buttons
     constexpr int buttonWidth = 70;
     constexpr int buttonHeight = 30;
@@ -129,6 +117,23 @@ namespace UISize
     constexpr int toggleHeight = 26;
     constexpr int toggleThumbSize = 20;
     constexpr int toggleTrackHeight = 18;
+
+    // Window size (calculated from layout)
+    // Knob row width: 5 knobs + 4 gaps = 378px
+    constexpr int knobRowWidth = (knobDiameter * 5) + (knobGap * 4);
+    // Button row width: toggle + 4 buttons + padding = 412px
+    constexpr int buttonRowTotalWidth = toggleWidth + (buttonWidth * 4) + (buttonPadding * 8);
+    // Use larger of the two + margins
+    constexpr int baseWidth = windowMargin * 2 + (buttonRowTotalWidth > knobRowWidth ? buttonRowTotalWidth : knobRowWidth);  // = 432
+
+    // Height: margin + 2 rows + row3 + button row + margin
+    constexpr int row3Height = 80;
+    constexpr int buttonRowHeight = 50;
+    constexpr int baseHeight = windowMargin + (knobRowHeight * 2) + row3Height + buttonRowHeight + windowMargin;  // = 330
+
+    // Labels
+    constexpr int labelHeight = 18;
+    constexpr int labelFontSize = 11;
 
     // BPM/TAP display
     constexpr int bpmDisplaySize = 36;
