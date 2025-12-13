@@ -96,7 +96,7 @@ inline UIColors uiColors;
 namespace UISize
 {
     // Window
-    constexpr int windowMargin = 20;
+    constexpr int windowMargin = 34;
 
     // Knob layout (direct specification)
     constexpr int knobDiameter = 50;
@@ -123,8 +123,8 @@ namespace UISize
     constexpr int knobRowWidth = (knobDiameter * 5) + (knobGap * 4);
     // Button row width: toggle + 4 buttons + padding = 412px
     constexpr int buttonRowTotalWidth = toggleWidth + (buttonWidth * 4) + (buttonPadding * 8);
-    // Use larger of the two + margins
-    constexpr int baseWidth = windowMargin * 2 + (buttonRowTotalWidth > knobRowWidth ? buttonRowTotalWidth : knobRowWidth);  // = 432
+    // Base width on knob row for symmetric margins (34px left + 378px knobs + 34px right = 446px)
+    constexpr int baseWidth = windowMargin * 2 + knobRowWidth;  // = 446
 
     // Height: margin + 2 rows + row3 + button row + margin
     constexpr int row3Height = 80;
