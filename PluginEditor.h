@@ -60,6 +60,7 @@ class EPaperLookAndFeel : public juce::LookAndFeel_V4
 public:
     UIColors::KnobColors* knobColors = nullptr;  // Pointer to current knob's colors
     bool forceMaxPosition = false;  // When true, indicator shows 100% position (for Kill Dry)
+    bool forceMinPosition = false;  // When true, indicator shows 0% position (for Kill Wet)
 
     EPaperLookAndFeel()
     {
@@ -72,8 +73,8 @@ public:
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider& slider) override
     {
-        // Override slider position if forceMaxPosition is set (Kill Dry active)
-        float effectiveSliderPos = forceMaxPosition ? 1.0f : sliderPos;
+        // Override slider position if forceMaxPosition/forceMinPosition is set (Kill Dry/Wet active)
+        float effectiveSliderPos = forceMaxPosition ? 1.0f : (forceMinPosition ? 0.0f : sliderPos);
         auto radius = juce::jmin (width / 2, height / 2) - 4.0f;
         auto centreX = x + width * 0.5f;
         auto centreY = y + height * 0.5f;
@@ -226,6 +227,7 @@ private:
     juce::ToggleButton freezeButton  { "Freeze" };
     juce::TextButton randomButton { "Randomize" };
     juce::TextButton killDryButton { "Kill Dry" };  // Momentary: forces MIX to 100% while pressed
+    juce::TextButton killWetButton { "Kill Wet" };  // Momentary: forces MIX to 0% while pressed
     juce::Label modeValueLabel;  // Displays current MODE name (Granular, PitchShft, etc.)
     juce::Label trigRateValueLabel;  // Displays current TRIG RATE division (1/16, 1/8T, etc.)
     juce::Label tapBpmLabel;  // Displays detected BPM from tap tempo (clickable for tap tempo)

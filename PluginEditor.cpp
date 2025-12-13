@@ -61,6 +61,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (killDryButton);
+    addAndMakeVisible (killWetButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
@@ -155,6 +156,26 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
+    // Style Kill Wet button (E-Paper: momentary button that forces MIX to 0% while pressed)
+    killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
+    killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
+    killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
+
+    // Kill Wet: Momentary button - sets killWet parameter while pressed
+    killWetButton.onStateChange = [this]
+    {
+        if (auto* param = processor.apvts.getParameter ("killWet"))
+        {
+            bool isDown = killWetButton.isDown();
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
+
     // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
@@ -200,6 +221,7 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
     killDryButton.setLookAndFeel (nullptr);
+    killWetButton.setLookAndFeel (nullptr);
 
     // unique_ptr will automatically clean up ePaperLookAndFeel
 }
@@ -221,13 +243,22 @@ void CloudLikeGranularEditor::timerCallback()
     float reverb = processor.apvts.getRawParameterValue("reverb")->load();
     float mix = processor.apvts.getRawParameterValue("mix")->load();
     bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
+    bool killWet = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
 
-    // Update MIX knob indicator position when Kill Dry is active
+    // Update MIX knob indicator position when Kill Dry/Wet is active
+    bool needsRepaint = false;
     if (mixLookAndFeel->forceMaxPosition != killDry)
     {
         mixLookAndFeel->forceMaxPosition = killDry;
-        mixKnob.slider.repaint();
+        needsRepaint = true;
     }
+    if (mixLookAndFeel->forceMinPosition != killWet)
+    {
+        mixLookAndFeel->forceMinPosition = killWet;
+        needsRepaint = true;
+    }
+    if (needsRepaint)
+        mixKnob.slider.repaint();
 
     // Update UI components using helper functions
     updateButtonStates(trigMode);
@@ -378,9 +409,10 @@ void CloudLikeGranularEditor::updateKnobValueLabels(int mode, float position, fl
     juce::String feedbackValueText = juce::String(static_cast<int>(feedback * 100.0f)) + "%";
     juce::String reverbValueText = juce::String(static_cast<int>(reverb * 100.0f)) + "%";
 
-    // Kill Dry: Show 100% when button is pressed
+    // Kill Dry/Wet: Show 100% or 0% when button is pressed (Kill Dry takes priority)
     bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
-    juce::String mixValueText = killDry ? "100%" : juce::String(static_cast<int>(mix * 100.0f)) + "%";
+    bool killWet = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
+    juce::String mixValueText = killDry ? "100%" : (killWet ? "0%" : juce::String(static_cast<int>(mix * 100.0f)) + "%");
 
     if (positionValueLabel.getText() != posValueText) positionValueLabel.setText(posValueText, juce::dontSendNotification);
     if (sizeValueLabel.getText() != sizeValueText) sizeValueLabel.setText(sizeValueText, juce::dontSendNotification);
@@ -629,21 +661,23 @@ void CloudLikeGranularEditor::resized()
     // Tap BPM label (circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setBounds (tapBpmArea);
 
-    // E-Paper UI: Buttons at bottom (4 buttons: TrigMode, Freeze, Randomize, Kill Dry)
+    // E-Paper UI: Buttons at bottom (5 buttons: TrigMode, Freeze, Randomize, Kill Dry, Kill Wet)
     // All buttons have equal size and spacing
     auto buttonArea = buttonRow.reduced (5);
-    auto buttonWidth = buttonArea.getWidth() / 4;
+    auto buttonWidth = buttonArea.getWidth() / 5;
     auto buttonPadding = 3;
 
     auto trigModeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto freezeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto randomArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto killDryArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
+    auto killWetArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
 
     trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
     killDryButton.setBounds (killDryArea);
+    killWetButton.setBounds (killWetArea);
 }
 
 void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)

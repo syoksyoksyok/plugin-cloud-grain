@@ -53,6 +53,7 @@ CloudLikeGranularProcessor::createParameterLayout()
     params.push_back (std::make_unique<juce::AudioParameterBool>("freeze",   "Freeze",   false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("randomize","Randomize",false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("killDry",  "Kill Dry", false));
+    params.push_back (std::make_unique<juce::AudioParameterBool>("killWet",  "Kill Wet", false));
 
     return { params.begin(), params.end() };
 }
@@ -869,10 +870,13 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     float reverbAmt = smoothedReverb.getNext();
     bool freeze     = apvts.getRawParameterValue ("freeze")->load() > 0.5f;
     bool killDry    = apvts.getRawParameterValue ("killDry")->load() > 0.5f;
+    bool killWet    = apvts.getRawParameterValue ("killWet")->load() > 0.5f;
 
-    // Kill Dry: Force mix to 100% when pressed
+    // Kill Dry/Wet: Force mix to 100% or 0% when pressed (Kill Dry takes priority)
     if (killDry)
         mix = 1.0f;
+    else if (killWet)
+        mix = 0.0f;
 
     if (wetBuffer.getNumSamples() < numSamples)
         wetBuffer.setSize (2, numSamples, false, false, true);
