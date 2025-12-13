@@ -136,15 +136,16 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
-    // Style Kill Dry button (E-Paper: momentary button that forces MIX to 100% while pressed)
+    // Style Kill Dry button (momentary button - ON while pressed)
+    // Parameter is in APVTS so Ableton Configure can map it
     killDryButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killDryButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killDryButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);  // Position knob color when ON
+    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);
     killDryButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killDryButton.setLookAndFeel (ePaperLookAndFeel.get());
 
-    // Kill Dry: Momentary button - sets killDry parameter while pressed
+    // Kill Dry: Momentary - ON while mouse is down
     killDryButton.onStateChange = [this]
     {
         if (auto* param = processor.apvts.getParameter ("killDry"))
@@ -153,21 +154,18 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->beginChangeGesture();
             param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
             param->endChangeGesture();
-            // Change text color when pressed
-            killDryButton.setColour (juce::TextButton::textColourOffId,
-                isDown ? uiColors.position.outline : uiColors.buttonText);
         }
     };
 
-    // Style Kill Wet button (E-Paper: momentary button that forces MIX to 0% while pressed)
+    // Style Kill Wet button (momentary button - ON while pressed)
     killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);  // Position knob color when ON
+    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);
     killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
 
-    // Kill Wet: Momentary button - sets killWet parameter while pressed
+    // Kill Wet: Momentary - ON while mouse is down
     killWetButton.onStateChange = [this]
     {
         if (auto* param = processor.apvts.getParameter ("killWet"))
@@ -176,9 +174,6 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->beginChangeGesture();
             param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
             param->endChangeGesture();
-            // Change text color when pressed
-            killWetButton.setColour (juce::TextButton::textColourOffId,
-                isDown ? uiColors.position.outline : uiColors.buttonText);
         }
     };
 
@@ -204,6 +199,8 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
     trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
+    // Note: killDry/killWet don't use ButtonAttachment to preserve momentary behavior
+    // Parameters are still in APVTS for Ableton Configure mapping
 }
 
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
@@ -297,6 +294,25 @@ void CloudLikeGranularEditor::updateButtonStates(bool trigMode)
     juce::Colour freezeTextColor = freezeState ? uiColors.freezeTextOn : uiColors.freezeTextOff;
     if (freezeButton.findColour(juce::ToggleButton::textColourId) != freezeTextColor)
         freezeButton.setColour(juce::ToggleButton::textColourId, freezeTextColor);
+
+    // Update Kill Dry/Wet button text colors based on parameter state
+    // (for external control via Ableton Configure MIDI mapping)
+    bool killDryState = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
+    bool killWetState = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
+
+    juce::Colour killDryTextColor = killDryState ? uiColors.position.outline : uiColors.buttonText;
+    if (killDryButton.findColour(juce::TextButton::textColourOffId) != killDryTextColor)
+    {
+        killDryButton.setColour(juce::TextButton::textColourOffId, killDryTextColor);
+        killDryButton.repaint();
+    }
+
+    juce::Colour killWetTextColor = killWetState ? uiColors.position.outline : uiColors.buttonText;
+    if (killWetButton.findColour(juce::TextButton::textColourOffId) != killWetTextColor)
+    {
+        killWetButton.setColour(juce::TextButton::textColourOffId, killWetTextColor);
+        killWetButton.repaint();
+    }
 }
 
 void CloudLikeGranularEditor::updateModeLabels(int mode)
