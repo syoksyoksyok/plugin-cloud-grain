@@ -140,7 +140,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     killDryButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killDryButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killDryButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    killDryButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);  // Position knob color when ON
     killDryButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killDryButton.setLookAndFeel (ePaperLookAndFeel.get());
 
@@ -153,6 +153,9 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->beginChangeGesture();
             param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
             param->endChangeGesture();
+            // Change text color when pressed
+            killDryButton.setColour (juce::TextButton::textColourOffId,
+                isDown ? uiColors.position.outline : uiColors.buttonText);
         }
     };
 
@@ -160,7 +163,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
-    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);  // Position knob color when ON
     killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
 
@@ -173,6 +176,9 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
             param->beginChangeGesture();
             param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
             param->endChangeGesture();
+            // Change text color when pressed
+            killWetButton.setColour (juce::TextButton::textColourOffId,
+                isDown ? uiColors.position.outline : uiColors.buttonText);
         }
     };
 
