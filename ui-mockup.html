@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D UI Design Mockups</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #f0f0f0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        h2 {
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        .style-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .component-row {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        .component {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .label {
+            font-size: 11px;
+            color: #666;
+        }
+
+        /* ========== Style A: Neumorphism (Soft UI) ========== */
+        .style-a {
+            background: #e0e0e0;
+        }
+        .knob-a {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #f0f0f0, #cacaca);
+            box-shadow:
+                6px 6px 12px #bebebe,
+                -6px -6px 12px #ffffff;
+            position: relative;
+        }
+        .knob-a::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 20px;
+            background: #c94c63;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            transform-origin: bottom center;
+            border-radius: 2px;
+        }
+        .knob-a-inner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #cacaca, #f0f0f0);
+            box-shadow: inset 2px 2px 4px #bebebe, inset -2px -2px 4px #ffffff;
+        }
+        .button-a {
+            padding: 10px 24px;
+            border-radius: 8px;
+            background: linear-gradient(145deg, #f0f0f0, #cacaca);
+            box-shadow:
+                4px 4px 8px #bebebe,
+                -4px -4px 8px #ffffff;
+            border: none;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+        }
+        .button-a:active {
+            box-shadow:
+                inset 4px 4px 8px #bebebe,
+                inset -4px -4px 8px #ffffff;
+        }
+        .switch-a {
+            width: 50px;
+            height: 26px;
+            border-radius: 13px;
+            background: linear-gradient(145deg, #cacaca, #f0f0f0);
+            box-shadow:
+                inset 3px 3px 6px #bebebe,
+                inset -3px -3px 6px #ffffff;
+            position: relative;
+            cursor: pointer;
+        }
+        .switch-a-thumb {
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #f0f0f0, #d0d0d0);
+            box-shadow: 2px 2px 4px #bebebe;
+            top: 2px;
+            left: 2px;
+            transition: left 0.2s;
+        }
+        .switch-a.on .switch-a-thumb {
+            left: 26px;
+        }
+        .switch-a.on {
+            background: linear-gradient(145deg, #5a5a5a, #707070);
+        }
+
+        /* ========== Style B: Classic Bevel ========== */
+        .style-b {
+            background: #d0d0d0;
+        }
+        .knob-b {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #e8e8e8 0%, #b0b0b0 50%, #909090 100%);
+            border: 2px solid #888;
+            box-shadow:
+                0 4px 8px rgba(0,0,0,0.3),
+                inset 0 2px 4px rgba(255,255,255,0.5),
+                inset 0 -2px 4px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .knob-b::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            bottom: 5px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+            border: 1px solid #999;
+        }
+        .knob-b::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 18px;
+            background: linear-gradient(to bottom, #c94c63, #a03050);
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-30deg);
+            transform-origin: bottom center;
+            border-radius: 2px;
+            box-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .button-b {
+            padding: 10px 24px;
+            background: linear-gradient(to bottom, #f0f0f0, #c0c0c0);
+            border: 2px solid;
+            border-color: #ddd #999 #888 #ccc;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+        }
+        .button-b:active {
+            background: linear-gradient(to bottom, #c0c0c0, #d0d0d0);
+            border-color: #888 #ccc #ddd #999;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .switch-b {
+            width: 50px;
+            height: 24px;
+            border-radius: 4px;
+            background: linear-gradient(to bottom, #909090, #b0b0b0);
+            border: 2px solid;
+            border-color: #666 #aaa #bbb #777;
+            position: relative;
+            cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .switch-b-thumb {
+            position: absolute;
+            width: 20px;
+            height: 18px;
+            border-radius: 3px;
+            background: linear-gradient(to bottom, #e0e0e0, #a0a0a0);
+            border: 1px solid;
+            border-color: #ccc #888 #777 #bbb;
+            top: 1px;
+            left: 2px;
+            transition: left 0.2s;
+        }
+        .switch-b.on .switch-b-thumb {
+            left: 26px;
+        }
+
+        /* ========== Style C: Modern Subtle ========== */
+        .style-c {
+            background: #ffffff;
+        }
+        .knob-c {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #f5f5f5;
+            border: 2px solid #ddd;
+            box-shadow:
+                0 4px 12px rgba(0,0,0,0.15),
+                0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .knob-c::before {
+            content: '';
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, #fff 0%, #e8e8e8 100%);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .knob-c::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 16px;
+            background: #479fa5;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%) rotate(60deg);
+            transform-origin: bottom center;
+            border-radius: 2px;
+        }
+        .knob-c-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #479fa5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .button-c {
+            padding: 10px 24px;
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+            box-shadow:
+                0 2px 4px rgba(0,0,0,0.1),
+                0 4px 8px rgba(0,0,0,0.05);
+            transition: all 0.15s;
+        }
+        .button-c:hover {
+            box-shadow:
+                0 4px 8px rgba(0,0,0,0.15),
+                0 6px 12px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+        .button-c:active {
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            transform: translateY(1px);
+        }
+        .switch-c {
+            width: 44px;
+            height: 24px;
+            border-radius: 12px;
+            background: #e0e0e0;
+            border: 1px solid #ccc;
+            position: relative;
+            cursor: pointer;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+            transition: background 0.2s;
+        }
+        .switch-c-thumb {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #ddd;
+            top: 1px;
+            left: 1px;
+            transition: left 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .switch-c.on {
+            background: #666;
+            border-color: #555;
+        }
+        .switch-c.on .switch-c-thumb {
+            left: 21px;
+        }
+
+        /* ========== Style D: Skeuomorphic Metal ========== */
+        .style-d {
+            background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+            color: #ddd;
+        }
+        .style-d h3 {
+            color: #aaa;
+        }
+        .knob-d {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4a4a4a 0%, #2a2a2a 50%, #1a1a1a 100%);
+            border: 3px solid #555;
+            box-shadow:
+                0 6px 12px rgba(0,0,0,0.5),
+                inset 0 2px 4px rgba(255,255,255,0.1),
+                inset 0 -2px 4px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .knob-d::before {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            right: 6px;
+            bottom: 6px;
+            border-radius: 50%;
+            background:
+                radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 50%),
+                linear-gradient(135deg, #3a3a3a, #252525);
+            border: 1px solid #444;
+        }
+        .knob-d::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 18px;
+            background: linear-gradient(to bottom, #ff6b7a, #c94c63);
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%) rotate(120deg);
+            transform-origin: bottom center;
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(201, 76, 99, 0.5);
+        }
+        .knob-d-ring {
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .button-d {
+            padding: 10px 24px;
+            background: linear-gradient(to bottom, #4a4a4a, #2a2a2a);
+            border: 2px solid #555;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 12px;
+            color: #ddd;
+            cursor: pointer;
+            box-shadow:
+                0 4px 8px rgba(0,0,0,0.4),
+                inset 0 1px 0 rgba(255,255,255,0.1);
+            text-shadow: 0 -1px 0 rgba(0,0,0,0.5);
+        }
+        .button-d:active {
+            background: linear-gradient(to bottom, #3a3a3a, #2a2a2a);
+            box-shadow:
+                0 2px 4px rgba(0,0,0,0.3),
+                inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .switch-d {
+            width: 50px;
+            height: 24px;
+            border-radius: 4px;
+            background: linear-gradient(to bottom, #1a1a1a, #2a2a2a);
+            border: 2px solid #444;
+            position: relative;
+            cursor: pointer;
+            box-shadow:
+                inset 0 2px 6px rgba(0,0,0,0.5),
+                0 1px 0 rgba(255,255,255,0.05);
+        }
+        .switch-d-thumb {
+            position: absolute;
+            width: 20px;
+            height: 18px;
+            border-radius: 3px;
+            background: linear-gradient(to bottom, #5a5a5a, #3a3a3a);
+            border: 1px solid #666;
+            top: 1px;
+            left: 2px;
+            transition: left 0.2s;
+            box-shadow:
+                0 2px 4px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .switch-d.on .switch-d-thumb {
+            left: 26px;
+            background: linear-gradient(to bottom, #6a6a6a, #4a4a4a);
+        }
+
+        /* Toggle functionality */
+        .switch {
+            cursor: pointer;
+        }
+
+        .style-label {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #666;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>3D UI Design Mockups for GranularTexture</h1>
+
+    <!-- Style A: Neumorphism -->
+    <div class="style-section style-a">
+        <span class="style-label">Style A</span>
+        <h3>Neumorphism (Soft UI) - ソフトな凹凸</h3>
+        <p>柔らかい影で立体感を表現。モダンでミニマル。</p>
+        <div class="component-row">
+            <div class="component">
+                <div class="knob-a">
+                    <div class="knob-a-inner"></div>
+                </div>
+                <span class="label">Knob</span>
+            </div>
+            <div class="component">
+                <button class="button-a">Freeze</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <button class="button-a">KillDry</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <div class="switch-a switch" onclick="this.classList.toggle('on')">
+                    <div class="switch-a-thumb"></div>
+                </div>
+                <span class="label">Manual / Auto</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Style B: Classic Bevel -->
+    <div class="style-section style-b">
+        <span class="style-label">Style B</span>
+        <h3>Classic Bevel - クラシックな立体</h3>
+        <p>90年代風のベベル効果。ハードウェア感。</p>
+        <div class="component-row">
+            <div class="component">
+                <div class="knob-b"></div>
+                <span class="label">Knob</span>
+            </div>
+            <div class="component">
+                <button class="button-b">Freeze</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <button class="button-b">KillDry</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <div class="switch-b switch" onclick="this.classList.toggle('on')">
+                    <div class="switch-b-thumb"></div>
+                </div>
+                <span class="label">Manual / Auto</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Style C: Modern Subtle -->
+    <div class="style-section style-c">
+        <span class="style-label">Style C</span>
+        <h3>Modern Subtle - モダン＆控えめ</h3>
+        <p>現在のデザインに近い。軽い影で立体感を追加。</p>
+        <div class="component-row">
+            <div class="component">
+                <div class="knob-c">
+                    <div class="knob-c-dot"></div>
+                </div>
+                <span class="label">Knob</span>
+            </div>
+            <div class="component">
+                <button class="button-c">Freeze</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <button class="button-c">KillDry</button>
+                <span class="label">Button</span>
+            </div>
+            <div class="component">
+                <div class="switch-c switch" onclick="this.classList.toggle('on')">
+                    <div class="switch-c-thumb"></div>
+                </div>
+                <span class="label">Manual / Auto</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Style D: Skeuomorphic Metal -->
+    <div class="style-section style-d">
+        <span class="style-label">Style D</span>
+        <h3>Skeuomorphic Metal - メタリック</h3>
+        <p>金属的な質感。プロ機材のような重厚感。</p>
+        <div class="component-row">
+            <div class="component">
+                <div class="knob-d">
+                    <div class="knob-d-ring"></div>
+                </div>
+                <span class="label" style="color:#aaa">Knob</span>
+            </div>
+            <div class="component">
+                <button class="button-d">Freeze</button>
+                <span class="label" style="color:#aaa">Button</span>
+            </div>
+            <div class="component">
+                <button class="button-d">KillDry</button>
+                <span class="label" style="color:#aaa">Button</span>
+            </div>
+            <div class="component">
+                <div class="switch-d switch" onclick="this.classList.toggle('on')">
+                    <div class="switch-d-thumb"></div>
+                </div>
+                <span class="label" style="color:#aaa">Manual / Auto</span>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: #fff; border-radius: 8px;">
+        <h3>比較まとめ</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background: #f5f5f5;">
+                <th style="padding: 10px; text-align: left;">スタイル</th>
+                <th style="padding: 10px; text-align: left;">特徴</th>
+                <th style="padding: 10px; text-align: left;">適合シーン</th>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;"><b>A: Neumorphism</b></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">ソフト、モダン、ミニマル</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">現代的なUI、モバイルアプリ風</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;"><b>B: Classic Bevel</b></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">レトロ、ハードウェア感</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">ビンテージ機材エミュレーション</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;"><b>C: Modern Subtle</b></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">控えめ、クリーン、読みやすい</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">現在のデザインとの親和性高</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><b>D: Skeuomorphic</b></td>
+                <td style="padding: 10px;">重厚、プロフェッショナル</td>
+                <td style="padding: 10px;">プロ向けプラグイン</td>
+            </tr>
+        </table>
+    </div>
+
+    <script>
+        // Switches are clickable via onclick in HTML
+    </script>
+</body>
+</html>
