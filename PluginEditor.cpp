@@ -735,36 +735,18 @@ void CloudLikeGranularEditor::resized()
 
 void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
 {
-    // Check if BPM circle was clicked (only in Manual mode)
+    // Check if TAP circle was clicked (only in Manual mode)
     bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
 
-    // Get BPM label bounds and check if click is inside
+    // Get TAP label bounds and check if click is inside
     auto bpmBounds = tapBpmLabel.getBounds();
     auto clickPos = event.getPosition();
 
     if (!trigMode && bpmBounds.contains (clickPos))
     {
-        // Trigger event
+        // Trigger event on tap click
         processor.triggerReceived.store (true);
         processor.trigRateBlink.store (true);  // TRIG LED blink (Manual mode)
-
-        // Tap tempo detection
-        double currentTime = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-        double lastTap = processor.lastTapTime.load();
-
-        if (lastTap > 0.0)
-        {
-            double interval = currentTime - lastTap;
-            // Valid tap range: 30 BPM (2 sec) to 300 BPM (0.2 sec)
-            if (interval >= 0.2 && interval <= 2.0)
-            {
-                float detectedBPM = 60.0f / static_cast<float>(interval);
-                processor.detectedTapBPM.store (detectedBPM);
-                processor.tapTempoActive.store (true);
-            }
-        }
-
-        processor.lastTapTime.store (currentTime);
 
         // Force repaint to show visual feedback
         repaint();
