@@ -54,6 +54,53 @@ struct UIColors
 static UIColors uiColors;
 
 //==============================================================================
+// Fixed UI Size Configuration (100% scale base values)
+// スケーリング対応の固定サイズ定義
+namespace UISize
+{
+    // Window base size (100% scale)
+    constexpr int baseWidth  = 640;
+    constexpr int baseHeight = 440;
+
+    // Margins & Padding
+    constexpr int windowMargin = 10;
+    constexpr int knobPadding  = 8;
+
+    // Grid layout
+    constexpr int numColumns = 5;
+    constexpr int numRows = 3;
+    constexpr int knobCellWidth = 124;   // (640 - 20) / 5
+    constexpr int knobRowHeight = 110;
+    constexpr int row3Height = 100;
+
+    // Knobs
+    constexpr int knobDiameter = 60;
+
+    // Labels
+    constexpr int labelHeight = 18;
+    constexpr int labelFontSize = 11;
+    constexpr int knobLabelOffsetY = 25;  // Distance from knob bottom to label
+
+    // Buttons
+    constexpr int buttonHeight = 36;
+    constexpr int buttonRowHeight = 50;
+    constexpr int buttonPadding = 3;
+
+    // BPM/TAP display
+    constexpr int bpmDisplaySize = 45;
+    constexpr int bpmFontSize = 10;
+
+    // LEDs
+    constexpr int ledDiameter = 12;
+    constexpr int ledSpacing = 24;
+    constexpr int ledLabelFontSize = 9;
+
+    // Available scale factors
+    constexpr float scales[] = { 1.0f, 1.25f, 1.5f, 2.0f };
+    constexpr int numScales = 4;
+}
+
+//==============================================================================
 // E-Paper LookAndFeel for rotary knobs with tick marks
 class EPaperLookAndFeel : public juce::LookAndFeel_V4
 {
@@ -175,7 +222,12 @@ public:
     void resized() override;
     void timerCallback() override;
     void mouseDown (const juce::MouseEvent& event) override;
+    void mouseUp (const juce::MouseEvent& event) override;
     void mouseMove (const juce::MouseEvent& event) override;
+
+    // Scale methods
+    void setScale (float newScale);
+    float getScale() const { return uiScale; }
 
 private:
     // ========== REFACTORED: timerCallback helper functions ==========
@@ -260,6 +312,13 @@ private:
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
     void setupKnob (Knob& k, const juce::String& name, EPaperLookAndFeel* lookAndFeel, bool showTextBox = true);
+
+    // UI Scale factor (1.0 = 100%, 1.25 = 125%, 1.5 = 150%, 2.0 = 200%)
+    float uiScale = 1.0f;
+
+    // Helper to get scaled integer value
+    int scaled (int baseValue) const { return static_cast<int> (baseValue * uiScale); }
+    float scaledF (float baseValue) const { return baseValue * uiScale; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudLikeGranularEditor)
 };
