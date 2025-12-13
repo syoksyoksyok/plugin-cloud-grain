@@ -61,6 +61,7 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (randomButton);
     addAndMakeVisible (killDryButton);
+    addAndMakeVisible (killWetButton);
     addAndMakeVisible (modeValueLabel);
     addAndMakeVisible (trigRateValueLabel);
     addAndMakeVisible (tapBpmLabel);
@@ -155,6 +156,26 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
+    // Style Kill Wet button (E-Paper: momentary button that forces MIX to 0% while pressed)
+    killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
+    killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
+    killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
+    killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.buttonText);
+    killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
+    killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
+
+    // Kill Wet: Momentary button - sets killWet parameter while pressed
+    killWetButton.onStateChange = [this]
+    {
+        if (auto* param = processor.apvts.getParameter ("killWet"))
+        {
+            bool isDown = killWetButton.isDown();
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
+
     // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setFont (juce::Font ("Courier New", 14.0f, juce::Font::bold));
     tapBpmLabel.setColour (juce::Label::textColourId, uiColors.knobLabel);
@@ -200,6 +221,7 @@ CloudLikeGranularEditor::~CloudLikeGranularEditor()
     freezeButton.setLookAndFeel (nullptr);
     randomButton.setLookAndFeel (nullptr);
     killDryButton.setLookAndFeel (nullptr);
+    killWetButton.setLookAndFeel (nullptr);
 
     // unique_ptr will automatically clean up ePaperLookAndFeel
 }
@@ -221,13 +243,22 @@ void CloudLikeGranularEditor::timerCallback()
     float reverb = processor.apvts.getRawParameterValue("reverb")->load();
     float mix = processor.apvts.getRawParameterValue("mix")->load();
     bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
+    bool killWet = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
 
-    // Update MIX knob indicator position when Kill Dry is active
+    // Update MIX knob indicator position when Kill Dry/Wet is active
+    bool needsRepaint = false;
     if (mixLookAndFeel->forceMaxPosition != killDry)
     {
         mixLookAndFeel->forceMaxPosition = killDry;
-        mixKnob.slider.repaint();
+        needsRepaint = true;
     }
+    if (mixLookAndFeel->forceMinPosition != killWet)
+    {
+        mixLookAndFeel->forceMinPosition = killWet;
+        needsRepaint = true;
+    }
+    if (needsRepaint)
+        mixKnob.slider.repaint();
 
     // Update UI components using helper functions
     updateButtonStates(trigMode);
@@ -378,9 +409,10 @@ void CloudLikeGranularEditor::updateKnobValueLabels(int mode, float position, fl
     juce::String feedbackValueText = juce::String(static_cast<int>(feedback * 100.0f)) + "%";
     juce::String reverbValueText = juce::String(static_cast<int>(reverb * 100.0f)) + "%";
 
-    // Kill Dry: Show 100% when button is pressed
+    // Kill Dry/Wet: Show 100% or 0% when button is pressed (Kill Dry takes priority)
     bool killDry = processor.apvts.getRawParameterValue("killDry")->load() > 0.5f;
-    juce::String mixValueText = killDry ? "100%" : juce::String(static_cast<int>(mix * 100.0f)) + "%";
+    bool killWet = processor.apvts.getRawParameterValue("killWet")->load() > 0.5f;
+    juce::String mixValueText = killDry ? "100%" : (killWet ? "0%" : juce::String(static_cast<int>(mix * 100.0f)) + "%");
 
     if (positionValueLabel.getText() != posValueText) positionValueLabel.setText(posValueText, juce::dontSendNotification);
     if (sizeValueLabel.getText() != sizeValueText) sizeValueLabel.setText(sizeValueText, juce::dontSendNotification);
@@ -498,8 +530,12 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     bool trigMode = processor.apvts.getRawParameterValue ("trigMode")->load() > 0.5f;
     bool isManualMode = !trigMode;
 
-    // Background color: lighter in Manual mode to indicate it's clickable
-    if (isManualMode)
+    // Background color: green when base tempo blinks, otherwise normal colors
+    if (baseTempoLedOn)
+    {
+        g.setColour (juce::Colour::fromRGB (100, 180, 100));  // Green (tempo blink)
+    }
+    else if (isManualMode)
     {
         g.setColour (juce::Colour::fromRGB (250, 250, 250));  // Almost white (clickable)
     }
@@ -528,40 +564,26 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
         g.drawText ("(TAP)", tapHintArea, juce::Justification::centred);
     }
 
-    // Draw LED indicators (tempo visualization) - positioned to the right of BPM circle
+    // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle
     auto ledSize = 12.0f;
-    auto ledSpacing = 18.0f;
-    auto ledX1 = bpmBounds.getRight() + 15.0f;  // LED 1: Right of BPM circle
-    auto ledX2 = ledX1 + ledSpacing;            // LED 2: Next to LED 1
+    auto ledX = bpmBounds.getRight() + 15.0f;  // LED: Right of BPM circle
     auto ledY = bpmBounds.getCentreY() - ledSize / 2.0f;  // Vertically centered with BPM circle
 
-    // LED 1: Base tempo (×1 quarter note)
+    // LED: TRIG RATE tempo (red)
     g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
-    g.fillEllipse (ledX1, ledY, ledSize, ledSize);
-    if (baseTempoLedOn)
-    {
-        g.setColour (juce::Colour::fromRGB (100, 180, 100));  // On color (green)
-        g.fillEllipse (ledX1 + 2, ledY + 2, ledSize - 4, ledSize - 4);
-    }
-    g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX1, ledY, ledSize, ledSize, 0.75f);
-
-    // LED 2: TRIG RATE tempo
-    g.setColour (juce::Colour::fromRGB (200, 200, 200));  // Off color (light gray)
-    g.fillEllipse (ledX2, ledY, ledSize, ledSize);
+    g.fillEllipse (ledX, ledY, ledSize, ledSize);
     if (trigRateLedOn)
     {
         g.setColour (juce::Colour::fromRGB (180, 100, 100));  // On color (red)
-        g.fillEllipse (ledX2 + 2, ledY + 2, ledSize - 4, ledSize - 4);
+        g.fillEllipse (ledX + 2, ledY + 2, ledSize - 4, ledSize - 4);
     }
     g.setColour (uiColors.buttonText);
-    g.drawEllipse (ledX2, ledY, ledSize, ledSize, 0.75f);
+    g.drawEllipse (ledX, ledY, ledSize, ledSize, 0.75f);
 
-    // LED labels (below each LED)
+    // LED label (below LED)
     g.setColour (uiColors.knobLabel);
     g.setFont (juce::Font ("Courier New", 9.0f, juce::Font::plain));
-    g.drawText ("×1", static_cast<int>(ledX1 - 5), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 10), 12, juce::Justification::centred);
-    g.drawText ("TRIG", static_cast<int>(ledX2 - 8), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 16), 12, juce::Justification::centred);
+    g.drawText ("TRIG", static_cast<int>(ledX - 8), static_cast<int>(ledY + ledSize + 2), static_cast<int>(ledSize + 16), 12, juce::Justification::centred);
 }
 
 void CloudLikeGranularEditor::resized()
@@ -639,21 +661,23 @@ void CloudLikeGranularEditor::resized()
     // Tap BPM label (circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setBounds (tapBpmArea);
 
-    // E-Paper UI: Buttons at bottom (4 buttons: TrigMode, Freeze, Randomize, Kill Dry)
+    // E-Paper UI: Buttons at bottom (5 buttons: TrigMode, Freeze, Randomize, Kill Dry, Kill Wet)
     // All buttons have equal size and spacing
     auto buttonArea = buttonRow.reduced (5);
-    auto buttonWidth = buttonArea.getWidth() / 4;
+    auto buttonWidth = buttonArea.getWidth() / 5;
     auto buttonPadding = 3;
 
     auto trigModeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto freezeArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto randomArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
     auto killDryArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
+    auto killWetArea = buttonArea.removeFromLeft (buttonWidth).reduced (buttonPadding);
 
     trigModeButton.setBounds (trigModeArea);
     freezeButton.setBounds (freezeArea);
     randomButton.setBounds (randomArea);
     killDryButton.setBounds (killDryArea);
+    killWetButton.setBounds (killWetArea);
 }
 
 void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& event)
