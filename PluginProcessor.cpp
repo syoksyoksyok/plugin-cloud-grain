@@ -54,6 +54,7 @@ CloudLikeGranularProcessor::createParameterLayout()
     params.push_back (std::make_unique<juce::AudioParameterBool>("randomize","Randomize",false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("killDry",  "Kill Dry", false));
     params.push_back (std::make_unique<juce::AudioParameterBool>("killWet",  "Kill Wet", false));
+    params.push_back (std::make_unique<juce::AudioParameterBool>("tap",      "Tap",      false));  // Manual tap trigger
 
     return { params.begin(), params.end() };
 }
@@ -655,7 +656,17 @@ void CloudLikeGranularProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         // In Manual mode:
         // - BPM LED: No blinking (disabled)
-        // - TRIG LED: Blinks on MIDI note (follows note length) or tap tempo click
+        // - TRIG LED: Blinks on MIDI note (follows note length) or tap button
+
+        // Check tap parameter for edge detection (rising edge triggers)
+        bool currentTapState = apvts.getRawParameterValue("tap")->load() > 0.5f;
+        if (currentTapState && !previousTapState)
+        {
+            // Rising edge: tap button just pressed or MIDI mapped to tap
+            triggerReceived.store(true);
+            trigRateBlink.store(true);   // TRIG LED on
+        }
+        previousTapState = currentTapState;
 
         // Process MIDI triggers - Note On/Off for LED and trigger
         for (const auto metadata : midi)
