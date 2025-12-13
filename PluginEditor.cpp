@@ -590,19 +590,11 @@ void CloudLikeGranularEditor::paint (juce::Graphics& g)
     float borderThickness = isManualMode ? 1.25f : 0.75f;
     g.drawEllipse (bpmBounds, borderThickness);
 
-    // Draw "BPM" text below the circle
+    // Draw label below the circle: "TAP" in Manual mode, "BPM" in Auto mode
     auto bpmLabelArea = bpmBounds.withY (bpmBounds.getBottom() + 2).withHeight (15);
     g.setFont (juce::Font ("Courier New", 10.0f, juce::Font::plain));
     g.setColour (uiColors.knobLabel);
-    g.drawText ("BPM", bpmLabelArea, juce::Justification::centred);
-
-    // Add "TAP" hint in Manual mode
-    if (isManualMode)
-    {
-        auto tapHintArea = bpmLabelArea.withY (bpmLabelArea.getBottom());
-        g.setFont (juce::Font ("Courier New", 8.0f, juce::Font::plain));
-        g.drawText ("(TAP)", tapHintArea, juce::Justification::centred);
-    }
+    g.drawText (isManualMode ? "TAP" : "BPM", bpmLabelArea, juce::Justification::centred);
 
     // Draw LED indicator (TRIG RATE tempo) - positioned to the right of BPM circle, same size as BPM circle
     auto ledSize = bpmBounds.getWidth();  // Same size as BPM circle
