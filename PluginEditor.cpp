@@ -136,7 +136,8 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
         }
     };
 
-    // Style Kill Dry button (E-Paper: momentary button that forces MIX to 100% while pressed)
+    // Style Kill Dry button (toggle button for MIDI mapping via Ableton Configure)
+    killDryButton.setClickingTogglesState (true);
     killDryButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killDryButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killDryButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
@@ -144,43 +145,14 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     killDryButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killDryButton.setLookAndFeel (ePaperLookAndFeel.get());
 
-    // Kill Dry: Momentary button - sets killDry parameter while pressed
-    killDryButton.onStateChange = [this]
-    {
-        if (auto* param = processor.apvts.getParameter ("killDry"))
-        {
-            bool isDown = killDryButton.isDown();
-            param->beginChangeGesture();
-            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
-            param->endChangeGesture();
-            // Change text color when pressed
-            killDryButton.setColour (juce::TextButton::textColourOffId,
-                isDown ? uiColors.position.outline : uiColors.buttonText);
-        }
-    };
-
-    // Style Kill Wet button (E-Paper: momentary button that forces MIX to 0% while pressed)
+    // Style Kill Wet button (toggle button for MIDI mapping via Ableton Configure)
+    killWetButton.setClickingTogglesState (true);
     killWetButton.setColour (juce::TextButton::buttonColourId, uiColors.buttonBackground);
     killWetButton.setColour (juce::TextButton::buttonOnColourId, uiColors.buttonBackgroundPressed);
     killWetButton.setColour (juce::TextButton::textColourOffId, uiColors.buttonText);
     killWetButton.setColour (juce::TextButton::textColourOnId, uiColors.position.outline);  // Position knob color when ON
     killWetButton.setColour (juce::ComboBox::outlineColourId, uiColors.buttonText);
     killWetButton.setLookAndFeel (ePaperLookAndFeel.get());
-
-    // Kill Wet: Momentary button - sets killWet parameter while pressed
-    killWetButton.onStateChange = [this]
-    {
-        if (auto* param = processor.apvts.getParameter ("killWet"))
-        {
-            bool isDown = killWetButton.isDown();
-            param->beginChangeGesture();
-            param->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
-            param->endChangeGesture();
-            // Change text color when pressed
-            killWetButton.setColour (juce::TextButton::textColourOffId,
-                isDown ? uiColors.position.outline : uiColors.buttonText);
-        }
-    };
 
     // Style tap BPM label (E-Paper: circular display like a knob, clickable for tap tempo)
     tapBpmLabel.setFont (juce::Font ("Courier New", 10.0f, juce::Font::bold));
@@ -204,6 +176,8 @@ CloudLikeGranularEditor::CloudLikeGranularEditor (CloudLikeGranularProcessor& p)
     trigRateAttachment = std::make_unique<SliderAttachment> (apvts, "trigRate", trigRateKnob.slider);
     trigModeAttachment = std::make_unique<ButtonAttachment> (apvts, "trigMode", trigModeButton);
     freezeAttachment   = std::make_unique<ButtonAttachment> (apvts, "freeze",   freezeButton);
+    killDryAttachment  = std::make_unique<ButtonAttachment> (apvts, "killDry",  killDryButton);
+    killWetAttachment  = std::make_unique<ButtonAttachment> (apvts, "killWet",  killWetButton);
 }
 
 CloudLikeGranularEditor::~CloudLikeGranularEditor()
