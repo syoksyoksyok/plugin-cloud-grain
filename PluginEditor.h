@@ -40,8 +40,8 @@ struct UIColors
     };
 
     // Default knob color (gray)
-    static constexpr auto defaultGray = juce::Colour (102, 102, 102);
-    static constexpr auto tickGray = juce::Colour (224, 224, 224);
+    static inline const juce::Colour defaultGray { 102, 102, 102 };
+    static inline const juce::Colour tickGray { 224, 224, 224 };
 
     // Knob colors indexed by KnobId
     std::array<KnobColors, kNumKnobs> knobColors {{
