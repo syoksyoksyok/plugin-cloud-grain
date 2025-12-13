@@ -54,11 +54,6 @@ public:
     // TRIG system state (public for UI access)
     std::atomic<bool> triggerReceived { false };  // Set when MIDI note or tempo trigger occurs
 
-    // Tap tempo state (public for UI access in Manual mode)
-    std::atomic<double> lastTapTime { 0.0 };  // Time of last tap (seconds)
-    std::atomic<float> detectedTapBPM { 0.0f };  // Detected BPM from tap tempo
-    std::atomic<bool> tapTempoActive { false };  // True if tap tempo is active
-
     // Host BPM (public for UI access in Auto mode)
     std::atomic<float> hostBPM { 0.0f };  // BPM from DAW (Auto mode)
 
@@ -568,10 +563,8 @@ private:
     std::atomic<int> previousMode { 0 };  // Track mode changes for cleanup
 
     // TRIG system internal state (private)
-    bool lastMidiNoteState = false;  // Track MIDI note on/off state for edge detection
     double tempoSyncPhase = 0.0;  // Phase accumulator for tempo sync triggers
     double baseTempoPhase = 0.0;  // Phase accumulator for base tempo LED
-    double tapTempoPhase = 0.0;  // Phase accumulator for tap tempo LED blink
 
     // Clouds-style density control
     float grainRatePhasor = 0.0f;
