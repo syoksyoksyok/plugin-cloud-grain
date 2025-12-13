@@ -784,15 +784,20 @@ void CloudLikeGranularEditor::resized()
 
     // ===== Button Row =====
     int btnRowY = margin + rowH * 2 + row3H;
-    int btnW = (scaled (UISize::baseWidth) - margin * 2) / 5;
+    int btnW = scaled (UISize::buttonWidth);
     int btnH = scaled (UISize::buttonHeight);
     int btnY = btnRowY + (btnRowH - btnH) / 2;
 
-    trigModeButton.setBounds (margin + btnW * 0 + btnPadding, btnY, btnW - btnPadding * 2, btnH);
-    freezeButton.setBounds   (margin + btnW * 1 + btnPadding, btnY, btnW - btnPadding * 2, btnH);
-    randomButton.setBounds   (margin + btnW * 2 + btnPadding, btnY, btnW - btnPadding * 2, btnH);
-    killDryButton.setBounds  (margin + btnW * 3 + btnPadding, btnY, btnW - btnPadding * 2, btnH);
-    killWetButton.setBounds  (margin + btnW * 4 + btnPadding, btnY, btnW - btnPadding * 2, btnH);
+    // Center all 5 buttons horizontally
+    int totalBtnWidth = btnW * 5 + btnPadding * 8;  // 5 buttons + padding between
+    int btnStartX = (scaled (UISize::baseWidth) - totalBtnWidth) / 2;
+    int btnSpacing = btnW + btnPadding * 2;
+
+    trigModeButton.setBounds (btnStartX + btnSpacing * 0, btnY, btnW, btnH);
+    freezeButton.setBounds   (btnStartX + btnSpacing * 1, btnY, btnW, btnH);
+    randomButton.setBounds   (btnStartX + btnSpacing * 2, btnY, btnW, btnH);
+    killDryButton.setBounds  (btnStartX + btnSpacing * 3, btnY, btnW, btnH);
+    killWetButton.setBounds  (btnStartX + btnSpacing * 4, btnY, btnW, btnH);
 }
 
 void CloudLikeGranularEditor::mouseDown (const juce::MouseEvent& /*event*/)
